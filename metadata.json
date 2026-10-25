@@ -1,0 +1,7 @@
+{
+  "name": "Kharcha",
+  "description": "A sleek, AI-powered expense tracker that helps you manage budgets with style, witty insights, and smart financial control.",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
