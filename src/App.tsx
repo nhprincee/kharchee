@@ -93,6 +93,49 @@ function formatLiveHeaderDate(date: Date): string {
   });
 }
 
+const VALID_EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  "Food",
+  "Chai & Snacks",
+  "Transport",
+  "Grocery",
+  "Entertainment",
+  "Bills",
+  "Shopping",
+];
+
+const VALID_PAYMENT_MODES: PaymentMode[] = ["UPI", "Cash", "Card"];
+
+function isValidExpenseRecord(item: unknown): item is Expense {
+  if (!item || typeof item !== "object") return false;
+  const exp = item as Record<string, unknown>;
+  if (typeof exp.id !== "string" || !exp.id.trim()) return false;
+  if (typeof exp.title !== "string" || !exp.title.trim()) return false;
+  if (
+    typeof exp.amount !== "number" ||
+    !Number.isFinite(exp.amount) ||
+    exp.amount <= 0 ||
+    exp.amount > 10000000
+  ) {
+    return false;
+  }
+  if (typeof exp.timestamp !== "string" || Number.isNaN(Date.parse(exp.timestamp))) {
+    return false;
+  }
+  if (
+    typeof exp.category !== "string" ||
+    !VALID_EXPENSE_CATEGORIES.includes(exp.category as ExpenseCategory)
+  ) {
+    return false;
+  }
+  if (
+    typeof exp.paymentMode !== "string" ||
+    !VALID_PAYMENT_MODES.includes(exp.paymentMode as PaymentMode)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [now, setNow] = useState<Date>(() => new Date());
@@ -105,9 +148,12 @@ export function App() {
 
   const [expenses, setExpenses] = useState<Expense[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.expenses);
-    if (saved) {
+    if (saved !== null) {
       try {
-        return JSON.parse(saved) as Expense[];
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(isValidExpenseRecord);
+        }
       } catch {
         return createInitialExpenses();
       }
@@ -117,9 +163,12 @@ export function App() {
 
   const [khataFriends, setKhataFriends] = useState<KhataFriend[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.khata);
-    if (saved) {
+    if (saved !== null) {
       try {
-        return JSON.parse(saved) as KhataFriend[];
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed as KhataFriend[];
+        }
       } catch {
         return createInitialKhata();
       }
@@ -142,7 +191,26 @@ export function App() {
   } | null>(null);
 
   const [isProActive, setIsProActive] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEYS.pro) === "true";
+    const storedPro = localStorage.getItem(STORAGE_KEYS.pro) === "true";
+    if (!storedPro) return false;
+
+    const savedUtr = (localStorage.getItem("kharche_pro_utr_v1") || "").trim();
+    if (/^\d{12}$/.test(savedUtr)) {
+      return true;
+    }
+
+    const trialClaimed = localStorage.getItem("kharche_pro_trial_v1") === "claimed";
+    const expiresAtRaw = localStorage.getItem("kharche_pro_trial_expires_at_v1");
+    if (trialClaimed || expiresAtRaw) {
+      const expiresAt = Number(expiresAtRaw || 0);
+      if (!Number.isFinite(expiresAt) || expiresAt <= 0 || Date.now() > expiresAt) {
+        localStorage.setItem(STORAGE_KEYS.pro, "false");
+        return false;
+      }
+      return true;
+    }
+
+    return storedPro;
   });
 
   const [autoLockdownAt90, setAutoLockdownAt90] = useState<boolean>(() => {
@@ -692,11 +760,13 @@ export function App() {
   };
 
   const handleClaimProTrial = () => {
+    const expiresAt = Date.now() + 72 * 60 * 60 * 1000;
     setIsProActive(true);
     localStorage.setItem(STORAGE_KEYS.pro, "true");
     localStorage.setItem("kharche_pro_trial_v1", "claimed");
+    localStorage.setItem("kharche_pro_trial_expires_at_v1", String(expiresAt));
     setIsProTeaserOpen(false);
-    showToast("🎉 3-Day PRO Black Trial Activated! All themes & AI uncapped");
+    showToast("🎉 3-Day PRO Black Trial Activated (72h)! All themes & AI uncapped");
   };
 
   const handleReplayTour = () => {
@@ -798,12 +868,11 @@ export function App() {
   };
 
   const handleResetAllExpenses = () => {
-    const initial = createInitialExpenses();
-    setExpenses(initial);
-    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(initial));
+    setExpenses([]);
+    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify([]));
     setLockdownActive(false);
     localStorage.setItem(STORAGE_KEYS.lockdown, "false");
-    showToast("All expense records reset to demo defaults");
+    showToast("All expense records cleared");
   };
 
   // Khata Handlers
@@ -958,6 +1027,145 @@ export function App() {
     showToast(`🔊 "${soundboxLine}"`);
   };
 
+  // LocalStorage Backup & Export/Import Safeguard
+  const handleExportBackup = () => {
+    playQuickAddChirp();
+    const backupPayload = {
+      version: "1.0",
+      exportedAt: new Date().toISOString(),
+      dailyLimit,
+      myUpiId,
+      themeId,
+      isProActive,
+      proUtr: localStorage.getItem("kharche_pro_utr_v1") || "",
+      lockdownActive,
+      autoLockdownAt90,
+      unlockedBadgeIds,
+      pinnedBadgeIds,
+      expenses,
+      khataFriends,
+    };
+
+    const jsonString = JSON.stringify(backupPayload, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `kharche-backup-${dateStamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast(
+      `💾 Exported ${expenses.length} transactions & ${khataFriends.length} Khata records to JSON`
+    );
+  };
+
+  const handleImportBackup = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const raw = typeof reader.result === "string" ? reader.result : "";
+        const parsed = JSON.parse(raw) as Partial<{
+          dailyLimit: number;
+          myUpiId: string;
+          themeId: ThemeId;
+          isProActive: boolean;
+          proUtr: string;
+          lockdownActive: boolean;
+          autoLockdownAt90: boolean;
+          unlockedBadgeIds: string[];
+          pinnedBadgeIds: string[];
+          expenses: unknown[];
+          khataFriends: KhataFriend[];
+        }>;
+
+        if (!Array.isArray(parsed.expenses) && !Array.isArray(parsed.khataFriends)) {
+          showToast("⚠️ Invalid backup file: missing expenses or Khata ledger");
+          return;
+        }
+
+        let validExpensesCount = expenses.length;
+        if (Array.isArray(parsed.expenses)) {
+          const validatedExpenses = parsed.expenses.filter(isValidExpenseRecord);
+          if (parsed.expenses.length > 0 && validatedExpenses.length === 0) {
+            showToast("⚠️ Backup rejected: expense records failed schema validation");
+            return;
+          }
+          validExpensesCount = validatedExpenses.length;
+          setExpenses(validatedExpenses);
+          localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(validatedExpenses));
+        }
+        if (Array.isArray(parsed.khataFriends)) {
+          const validatedFriends = parsed.khataFriends.filter(
+            (f) =>
+              f &&
+              typeof f === "object" &&
+              typeof f.id === "string" &&
+              typeof f.name === "string" &&
+              Array.isArray(f.entries)
+          );
+          setKhataFriends(validatedFriends);
+          localStorage.setItem(STORAGE_KEYS.khata, JSON.stringify(validatedFriends));
+        }
+        if (
+          typeof parsed.dailyLimit === "number" &&
+          Number.isFinite(parsed.dailyLimit) &&
+          parsed.dailyLimit >= 50 &&
+          parsed.dailyLimit <= 1000000
+        ) {
+          setDailyLimit(parsed.dailyLimit);
+          localStorage.setItem(STORAGE_KEYS.dailyLimit, String(parsed.dailyLimit));
+        }
+        if (typeof parsed.myUpiId === "string" && parsed.myUpiId.includes("@")) {
+          setMyUpiId(parsed.myUpiId.trim());
+          localStorage.setItem("kharche_my_upi_id_v1", parsed.myUpiId.trim());
+        }
+        const cleanedBackupUtr =
+          typeof parsed.proUtr === "string" ? parsed.proUtr.trim() : "";
+        if (/^\d{12}$/.test(cleanedBackupUtr)) {
+          localStorage.setItem("kharche_pro_utr_v1", cleanedBackupUtr);
+        }
+        if (typeof parsed.isProActive === "boolean") {
+          const canActivatePro =
+            parsed.isProActive &&
+            (/^\d{12}$/.test(cleanedBackupUtr) ||
+              /^\d{12}$/.test(localStorage.getItem("kharche_pro_utr_v1") || ""));
+          setIsProActive(canActivatePro);
+          localStorage.setItem(STORAGE_KEYS.pro, String(canActivatePro));
+        }
+        if (Array.isArray(parsed.unlockedBadgeIds)) {
+          const cleanUnlocked = parsed.unlockedBadgeIds.filter(
+            (id): id is string => typeof id === "string"
+          );
+          setUnlockedBadgeIds(cleanUnlocked);
+          localStorage.setItem(
+            "kharche_stark_unlocked_badges_v1",
+            JSON.stringify(cleanUnlocked)
+          );
+        }
+        if (Array.isArray(parsed.pinnedBadgeIds)) {
+          const cleanPinned = parsed.pinnedBadgeIds.filter(
+            (id): id is string => typeof id === "string"
+          );
+          setPinnedBadgeIds(cleanPinned);
+          localStorage.setItem(
+            "kharche_stark_pinned_badges_v1",
+            JSON.stringify(cleanPinned)
+          );
+        }
+
+        playQuickAddChirp();
+        showToast(`✅ Backup restored: ${validExpensesCount} valid transactions recovered`);
+      } catch {
+        showToast("⚠️ Failed to parse JSON backup file. Please select a valid backup.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const navItems: Array<{
     id: TabId;
     label: string;
@@ -1005,6 +1213,8 @@ export function App() {
           onOpenThemes={() => setIsThemeModalOpen(true)}
           onOpenStreakCelebration={() => handleTriggerCelebration("streak")}
           onOpenRewardVault={() => setIsRewardVaultOpen(true)}
+          onExportBackup={handleExportBackup}
+          onImportBackup={handleImportBackup}
         />
 
         {/* Sleek Single-Row Horizontal Slide Tray with Monochrome Glass Badges */}
@@ -1685,6 +1895,8 @@ export function App() {
           onShowToast={showToast}
           onReplayTour={handleReplayTour}
           onOpenRewardVault={() => setIsRewardVaultOpen(true)}
+          onExportBackup={handleExportBackup}
+          onImportBackup={handleImportBackup}
         />
 
         {/* Stark Reward Vault (Daily Discipline Cyber Roulette Wheel) */}

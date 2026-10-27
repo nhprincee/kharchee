@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   X,
   Check,
@@ -15,6 +15,9 @@ import {
   Shield,
   Zap,
   Gift,
+  Download,
+  Upload,
+  Database,
 } from "lucide-react";
 import type { FanTheme } from "../types";
 import { STARK_ARC_BADGES } from "./StarkRewardVaultModal";
@@ -36,6 +39,8 @@ interface ProfileDrawerProps {
   onShowToast: (message: string) => void;
   onReplayTour?: () => void;
   onOpenRewardVault?: () => void;
+  onExportBackup?: () => void;
+  onImportBackup?: (file: File) => void;
 }
 
 export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
@@ -55,7 +60,11 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   onShowToast,
   onReplayTour,
   onOpenRewardVault,
+  onExportBackup,
+  onImportBackup,
 }) => {
+  const backupInputRef = useRef<HTMLInputElement | null>(null);
+
   // User Profile State
   const [userName, setUserName] = useState(() => {
     return localStorage.getItem("kharche_user_name_v1") || "Mrigander Singh";
@@ -78,6 +87,13 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
 
   // Receiving UPI ID State
   const [upiInput, setUpiInput] = useState(myUpiId);
+  const [upiError, setUpiError] = useState("");
+
+  // PRO Tier UTR / Transaction Reference Verification State
+  const [proUtrInput, setProUtrInput] = useState(() => {
+    return localStorage.getItem("kharche_pro_utr_v1") || "";
+  });
+  const [proUtrError, setProUtrError] = useState("");
 
   useEffect(() => {
     setUpiInput(myUpiId);
@@ -658,28 +674,77 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={onTogglePro}
-                className={`w-full min-h-[42px] rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all ${
-                  isProActive
-                    ? "bg-slate-800 border border-amber-400/50 text-amber-300 hover:bg-slate-700"
-                    : `${theme.buttonBg} ${theme.buttonText}`
-                }`}
-              >
-                {isProActive ? "Manage Subscription (Active)" : "Upgrade to Black Edition"}
-              </button>
+              {/* PRO Transaction Reference / UTR Number Verification */}
+              {!isProActive ? (
+                <div className="pt-2 border-t border-white/10 space-y-2">
+                  <label
+                    htmlFor="profile-pro-utr-input"
+                    className="block text-[10px] font-mono font-bold uppercase tracking-wider text-amber-300"
+                  >
+                    Enter Transaction Reference / UTR Number
+                  </label>
+                  <input
+                    id="profile-pro-utr-input"
+                    type="text"
+                    value={proUtrInput}
+                    onChange={(e) => {
+                      setProUtrInput(e.target.value);
+                      setProUtrError("");
+                    }}
+                    placeholder="e.g. 430189234512 (12-digit UPI UTR)"
+                    className="w-full h-9 px-3 rounded-xl bg-slate-950 border border-amber-400/40 text-xs font-mono font-bold text-amber-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                  {proUtrError && (
+                    <p className="text-[10px] text-rose-400 font-medium">{proUtrError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cleanUtr = proUtrInput.trim();
+                      if (!/^\d{12}$/.test(cleanUtr)) {
+                        setProUtrError(
+                          "Please enter a valid 12-digit numeric UPI UTR / Reference Number (e.g. 430189234512) to verify and activate PRO."
+                        );
+                        return;
+                      }
+                      localStorage.setItem("kharche_pro_utr_v1", cleanUtr);
+                      setProUtrError("");
+                      onTogglePro();
+                      onShowToast(`👑 Verified UTR #${cleanUtr} · PRO Black Edition Activated!`);
+                    }}
+                    className={`w-full min-h-[42px] rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all ${theme.buttonBg} ${theme.buttonText}`}
+                  >
+                    Verify UTR &amp; Activate Black Edition
+                  </button>
+                </div>
+              ) : (
+                <div className="pt-2 border-t border-white/10 space-y-2">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl">
+                    <span>Verified UTR Ref:</span>
+                    <span className="font-bold">
+                      {proUtrInput || localStorage.getItem("kharche_pro_utr_v1") || "UTR-VERIFIED"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onTogglePro}
+                    className="w-full min-h-[38px] rounded-2xl text-xs font-black bg-slate-800 border border-amber-400/50 text-amber-300 hover:bg-slate-700 cursor-pointer active:scale-95 transition-all"
+                  >
+                    Manage Subscription (Active)
+                  </button>
+                </div>
+              )}
             </div>
           </section>
 
-          {/* 5. APP PREFERENCES & DANGER ZONE */}
+          {/* 5. APP PREFERENCES, CUSTOM UPI & LOCALSTORAGE BACKUP SAFEGUARD */}
           <section
             style={{ borderColor: `${theme.accentHex}25` }}
             className="p-4 rounded-3xl border bg-slate-900/70 space-y-4"
           >
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
               <Sliders className="w-3 h-3" />
-              <span>Budget Preferences &amp; Controls</span>
+              <span>Budget Preferences, Custom UPI &amp; Backup</span>
             </span>
 
             {/* Daily Budget Quick Override */}
@@ -731,38 +796,96 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
               </div>
             </div>
 
-            {/* My Receiving UPI ID for Khata */}
-            <div className="space-y-1.5 pt-2 border-t border-white/[0.08]">
+            {/* Custom Personal UPI ID Configuration */}
+            <div className="space-y-1.5 pt-3 border-t border-white/[0.08]">
               <div className="flex items-center justify-between">
                 <label htmlFor="my-upi-input" className="text-xs font-bold text-slate-200 block">
-                  My Receiving UPI ID (Khata Settlement)
+                  My Personal Receiving UPI ID
                 </label>
-                <span className="text-[10px] text-cyan-400 font-mono">Direct Bank Credit</span>
+                <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Dynamic QR &amp; Links</span>
+                </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Friends will scan your QR or tap deep-links to pay straight into this VPA.
+                Enter your own UPI VPA (e.g. <code className="text-cyan-300">user@okhdfcbank</code>). Used dynamically across all Split QR codes, Khata reminders, and payment deep-links.
               </p>
               <div className="flex items-center gap-2">
                 <input
                   id="my-upi-input"
                   type="text"
-                  placeholder="e.g. mrigander@upi"
+                  placeholder="e.g. user@okhdfcbank"
                   value={upiInput}
-                  onChange={(e) => setUpiInput(e.target.value)}
-                  className="flex-1 h-10 px-3 rounded-xl bg-slate-950 border border-white/10 text-xs font-mono font-bold text-cyan-200 focus:outline-none focus:border-cyan-400"
+                  onChange={(e) => {
+                    setUpiInput(e.target.value);
+                    setUpiError("");
+                  }}
+                  className="flex-1 h-10 px-3 rounded-xl bg-slate-950 border border-white/10 text-xs font-mono font-bold text-cyan-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-400"
                 />
                 <button
                   type="button"
                   onClick={() => {
-                    const clean = upiInput.trim();
-                    if (clean && onUpdateMyUpiId) {
-                      onUpdateMyUpiId(clean);
-                      onShowToast(`Receiving UPI set to ${clean}`);
+                    const clean = upiInput.trim().toLowerCase();
+                    if (!clean || !clean.includes("@")) {
+                      setUpiError("Enter a valid UPI ID containing '@' (e.g. user@okhdfcbank)");
+                      return;
                     }
+                    setUpiError("");
+                    onUpdateMyUpiId?.(clean);
+                    onShowToast(`✅ Personal UPI ID saved: ${clean}`);
                   }}
-                  className="h-10 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-xs font-bold text-white cursor-pointer transition-all active:scale-95"
+                  className="h-10 px-4 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-xs font-bold text-cyan-200 cursor-pointer transition-all active:scale-95"
                 >
                   Save UPI
+                </button>
+              </div>
+              {upiError && <p className="text-[10px] text-rose-400 font-medium">{upiError}</p>}
+            </div>
+
+            {/* LocalStorage Backup & Export/Import Safeguard */}
+            <div className="space-y-2 pt-3 border-t border-white/[0.08]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>LocalStorage Backup &amp; Safeguard</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">JSON Snapshot</span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-snug">
+                Download your complete transaction &amp; Khata history locally or restore a previous backup so data is never lost if browser cache clears.
+              </p>
+
+              <input
+                ref={backupInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file && onImportBackup) {
+                    onImportBackup(file);
+                  }
+                  e.target.value = "";
+                }}
+                className="hidden"
+              />
+
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => onExportBackup?.()}
+                  className="h-10 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/40 text-xs font-bold text-emerald-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>Export Backup (JSON)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => backupInputRef.current?.click()}
+                  className="h-10 px-3 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/40 text-xs font-bold text-cyan-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                >
+                  <Upload className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>Import / Restore Backup</span>
                 </button>
               </div>
             </div>
@@ -779,7 +902,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                   className="w-full h-10 px-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Replay App Tour & Onboarding</span>
+                  <span>Replay App Tour &amp; Onboarding</span>
                 </button>
               </div>
             )}

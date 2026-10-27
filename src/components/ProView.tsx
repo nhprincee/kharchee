@@ -126,7 +126,13 @@ export const ProView: React.FC<ProViewProps> = ({
   // Truecaller-Style Gold / Platinum Elite Carousel & Checkout Drawer State
   const [selectedPlan, setSelectedPlan] = useState<"monthly" | "quarterly">("quarterly");
   const [isCheckoutDrawerOpen, setIsCheckoutDrawerOpen] = useState(false);
+  const [proUtrInput, setProUtrInput] = useState<string>(
+    () => localStorage.getItem("kharche_pro_utr_v1") || ""
+  );
+  const [proUtrError, setProUtrError] = useState<string | null>(null);
 
+  const activeReceivingUpi = (myUpiId || "mrigander@upi").trim();
+  const encodedReceivingUpi = encodeURIComponent(activeReceivingUpi);
   const selectedPlanAmount = selectedPlan === "monthly" ? 39 : 99;
   const selectedPlanTitle =
     selectedPlan === "monthly" ? "PRO GOLD EDITION" : "PRO PLATINUM ELITE";
@@ -134,10 +140,10 @@ export const ProView: React.FC<ProViewProps> = ({
     selectedPlan === "quarterly"
       ? "START 3-MONTH ELITE PASS (₹99)"
       : "START MONTHLY GOLD PASS (₹39)";
-  const proUpiDeepLink = `upi://pay?pa=mrigander@upi&pn=Mrigander&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
-  const gpayDeepLink = `tez://upi/pay?pa=mrigander@upi&pn=Mrigander&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
-  const phonePeDeepLink = `phonepe://pay?pa=mrigander@upi&pn=Mrigander&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
-  const paytmDeepLink = `paytmmp://pay?pa=mrigander@upi&pn=Mrigander&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
+  const proUpiDeepLink = `upi://pay?pa=${encodedReceivingUpi}&pn=KharchePro&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
+  const gpayDeepLink = `tez://upi/pay?pa=${encodedReceivingUpi}&pn=KharchePro&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
+  const phonePeDeepLink = `phonepe://pay?pa=${encodedReceivingUpi}&pn=KharchePro&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
+  const paytmDeepLink = `paytmmp://pay?pa=${encodedReceivingUpi}&pn=KharchePro&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
 
   // Device orientation listener for subtle mobile 3D card tilt
   useEffect(() => {
@@ -466,12 +472,13 @@ export const ProView: React.FC<ProViewProps> = ({
     playProVaultChime();
     const activePlan = planOverride || selectedPlan;
     setSelectedPlan(activePlan);
+    setProUtrError(null);
     setIsCheckoutDrawerOpen(true);
   };
 
   const handleLaunchUpiApp = (deepLinkUrl: string, appLabel: string) => {
     playProVaultChime();
-    onShowToast?.(`⚡ Opening ${appLabel} (₹${selectedPlanAmount} → mrigander@upi)`);
+    onShowToast?.(`⚡ Opening ${appLabel} (₹${selectedPlanAmount} → ${activeReceivingUpi})`);
     try {
       window.location.href = deepLinkUrl;
     } catch {
@@ -487,11 +494,11 @@ export const ProView: React.FC<ProViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-6">
+    <div className="space-y-5 pb-8">
       {/* =====================================================================
-          1. INTERACTIVE 3D OBSIDIAN VIP CARD
+          1. CRED-STYLE 3D METALLIC BLACK TITANIUM CARD
          ===================================================================== */}
-      <div className="pt-1" style={{ perspective: "1100px" }}>
+      <div className="pt-1" style={{ perspective: "1200px" }}>
         <div
           onMouseMove={handleCardMouseMove}
           onMouseLeave={handleCardReset}
@@ -506,22 +513,40 @@ export const ProView: React.FC<ProViewProps> = ({
               : "transform 450ms cubic-bezier(0.22, 1, 0.36, 1)",
             transformStyle: "preserve-3d",
           }}
-          className="relative rounded-3xl p-5 bg-gradient-to-br from-[#12161f] via-[#080b11] to-[#04060a] border border-amber-400/30 shadow-[0_15px_35px_rgba(0,0,0,0.8),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden select-none cursor-grab active:cursor-grabbing"
+          className="relative rounded-3xl p-6 bg-gradient-to-tr from-[#0a0d14] via-[#151c2c] to-[#0d121c] border border-amber-400/40 shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_20px_rgba(251,191,36,0.15)] overflow-hidden select-none cursor-grab active:cursor-grabbing"
         >
-          {/* Interactive Mouse/Orientation Holographic Shimmer Overlay */}
+          {/* Holographic Double-Edge Inner Rim */}
           <div
-            className="pointer-events-none absolute inset-0 transition-opacity duration-200"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-[3px] rounded-[21px] border border-amber-300/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.22)]"
+          />
+
+          {/* Dynamic Diagonal Specular Sheen */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
             style={{
-              background: `radial-gradient(circle 220px at ${tilt.shimmerX}% ${tilt.shimmerY}%, rgba(251, 191, 36, 0.18) 0%, rgba(226, 232, 240, 0.08) 45%, transparent 80%)`,
+              background:
+                "linear-gradient(125deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.12) 32%, rgba(251,191,36,0.08) 48%, transparent 65%)",
             }}
           />
 
-          {/* Subtle Diagonal Brushed Titanium Sheen */}
+          {/* Interactive Mouse/Orientation Holographic Shimmer Overlay */}
           <div
-            className="pointer-events-none absolute inset-0 opacity-20"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 transition-opacity duration-200"
+            style={{
+              background: `radial-gradient(circle 240px at ${tilt.shimmerX}% ${tilt.shimmerY}%, rgba(251, 191, 36, 0.22) 0%, rgba(226, 232, 240, 0.1) 45%, transparent 80%)`,
+            }}
+          />
+
+          {/* Fine Brushed Metallic Carbon Grain */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-25"
             style={{
               backgroundImage:
-                "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 8px)",
+                "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 6px)",
             }}
           />
 
@@ -529,98 +554,113 @@ export const ProView: React.FC<ProViewProps> = ({
           <div className="relative z-10 flex items-start justify-between gap-2">
             <div>
               <div className="flex items-center gap-1.5">
-                <Crown className="w-4 h-4 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]" />
-                <span className="text-[10px] font-black tracking-[0.28em] uppercase text-amber-300/90 font-mono">
+                <Crown className="w-4 h-4 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
+                <span className="text-[10px] font-black tracking-[0.28em] uppercase bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200 bg-clip-text text-transparent font-mono drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
                   KHARCHE · BLACK TITANIUM
                 </span>
               </div>
-              <span className="inline-block mt-1 text-[9px] font-mono font-bold tracking-[0.2em] uppercase px-2 py-0.5 rounded-md bg-black/50 border border-amber-400/30 text-amber-200/90">
+              <span className="inline-block mt-1.5 text-[9px] font-mono font-bold tracking-[0.2em] uppercase px-2.5 py-0.5 rounded-md bg-black/60 border border-amber-400/40 text-amber-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
                 LIFETIME ELITE VAULT MEMBER
               </span>
             </div>
 
             {/* Live CRED-Style Financial Discipline Score Pill */}
-            <div className="px-3 py-1.5 rounded-xl bg-black/60 border border-amber-400/40 text-amber-300 font-mono tracking-widest text-right shrink-0 shadow-[inset_0_1px_1px_rgba(251,191,36,0.2)]">
-              <span className="block text-[8px] font-mono uppercase tracking-widest text-amber-200/70">
+            <div className="px-3 py-1.5 rounded-xl bg-black/70 border border-amber-400/45 text-amber-300 font-mono tracking-widest text-right shrink-0 shadow-[0_4px_12px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(251,191,36,0.25)]">
+              <span className="block text-[8px] font-mono uppercase tracking-widest text-amber-200/75">
                 CRED DISCIPLINE
               </span>
-              <span className="font-mono text-xs font-black text-amber-300 tracking-widest drop-shadow-[0_0_6px_rgba(251,191,36,0.4)]">
+              <span className="font-mono text-xs font-black text-amber-300 tracking-widest drop-shadow-[0_0_6px_rgba(251,191,36,0.45)]">
                 Score: {disciplineScore} / 900
               </span>
             </div>
           </div>
 
-          {/* Middle Row: Realistic Brushed Gold Holographic EMV Chip & Number */}
-          <div className="relative z-10 my-5 flex items-center justify-between">
+          {/* Middle Row: High-Detail Golden Microchip with Laser-Etched Circuitry & Embossed Card Number */}
+          <div className="relative z-10 my-6 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              {/* Realistic Brushed Gold Holographic EMV Microchip */}
-              <div className="relative w-12 h-9 rounded-lg bg-gradient-to-br from-amber-200 via-amber-400 to-yellow-600 p-0.5 shadow-[0_2px_10px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.6)] border border-amber-200/70 overflow-hidden">
-                {/* Brushed metallic sheen */}
+              {/* High-Detail Realistic Golden Microchip with Laser-Etched Circuitry */}
+              <div className="relative w-13 h-10 rounded-lg bg-gradient-to-br from-amber-100 via-amber-400 to-yellow-700 p-0.5 shadow-[0_4px_14px_rgba(0,0,0,0.85),0_0_10px_rgba(251,191,36,0.25),inset_0_1px_2px_rgba(255,255,255,0.85)] border border-amber-200/80 overflow-hidden">
+                {/* Metallic Gold Foil Specular Grain */}
                 <div
-                  className="pointer-events-none absolute inset-0 opacity-35"
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 opacity-40"
                   style={{
                     backgroundImage:
-                      "repeating-linear-gradient(90deg, rgba(255,255,255,0.35) 0px, rgba(255,255,255,0.35) 1px, transparent 1px, transparent 3px)",
+                      "repeating-linear-gradient(90deg, rgba(255,255,255,0.4) 0px, rgba(255,255,255,0.4) 1px, transparent 1px, transparent 3px)",
                   }}
                 />
-                {/* Precision EMV Circuit Traces SVG */}
+                {/* Laser-Etched EMV Circuitry SVG */}
                 <svg
-                  viewBox="0 0 48 36"
+                  viewBox="0 0 52 40"
                   className="w-full h-full relative z-10"
                   fill="none"
                 >
                   <rect
-                    x="1"
-                    y="1"
-                    width="46"
-                    height="34"
+                    x="1.5"
+                    y="1.5"
+                    width="49"
+                    height="37"
                     rx="5"
-                    stroke="rgba(120, 53, 15, 0.55)"
-                    strokeWidth="1"
+                    stroke="rgba(120, 53, 15, 0.7)"
+                    strokeWidth="1.1"
                   />
                   <rect
-                    x="15"
-                    y="9"
+                    x="17"
+                    y="10"
                     width="18"
-                    height="18"
-                    rx="3"
-                    stroke="rgba(120, 53, 15, 0.65)"
-                    strokeWidth="1.1"
-                    fill="rgba(251, 191, 36, 0.25)"
+                    height="20"
+                    rx="3.5"
+                    stroke="rgba(120, 53, 15, 0.8)"
+                    strokeWidth="1.2"
+                    fill="rgba(251, 191, 36, 0.35)"
                   />
                   <path
-                    d="M1 12 H15 M1 24 H15 M33 12 H47 M33 24 H47 M24 1 V9 M24 27 V35 M19 18 H29"
-                    stroke="rgba(120, 53, 15, 0.65)"
-                    strokeWidth="1.1"
+                    d="M1.5 13 H17 M1.5 20 H17 M1.5 27 H17 M35 13 H50.5 M35 20 H50.5 M35 27 H50.5 M26 1.5 V10 M26 30 V38.5 M21 16 H31 M21 24 H31"
+                    stroke="rgba(120, 53, 15, 0.78)"
+                    strokeWidth="1.15"
                     strokeLinecap="round"
                   />
+                  <circle cx="26" cy="20" r="2.2" fill="rgba(120, 53, 15, 0.75)" />
                 </svg>
               </div>
-              <Cpu className="w-4 h-4 text-slate-400/80" />
+              <Cpu className="w-4 h-4 text-amber-300/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" />
             </div>
 
-            <div className="text-right font-mono text-[11px] text-slate-200 tracking-[0.2em] uppercase font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+            {/* Embossed Raised Metallic Silver/Gold Foil Card Numbers */}
+            <div
+              style={{
+                textShadow:
+                  "0 2px 4px rgba(0,0,0,0.95), 0 -1px 0 rgba(255,255,255,0.35)",
+              }}
+              className="text-right font-mono text-xs sm:text-sm bg-gradient-to-b from-white via-slate-200 to-amber-200 bg-clip-text text-transparent tracking-[0.22em] uppercase font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]"
+            >
               4890 •••• •••• 0785
             </div>
           </div>
 
-          {/* Bottom Row: Cardholder Name & Vault Status */}
-          <div className="relative z-10 flex items-end justify-between pt-2 border-t border-white/10">
+          {/* Bottom Row: Embossed Cardholder Name & Vault Status */}
+          <div className="relative z-10 flex items-end justify-between pt-3 border-t border-white/15">
             <div>
-              <span className="block text-[8px] font-mono uppercase tracking-[0.22em] text-slate-400">
+              <span className="block text-[8px] font-mono uppercase tracking-[0.24em] text-amber-200/70">
                 CARDHOLDER
               </span>
-              <span className="font-mono text-sm text-slate-200 tracking-[0.2em] uppercase font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+              <span
+                style={{
+                  textShadow:
+                    "0 2px 5px rgba(0,0,0,0.95), 0 -1px 0 rgba(255,255,255,0.4)",
+                }}
+                className="font-mono text-sm sm:text-base bg-gradient-to-r from-amber-100 via-yellow-200 to-amber-400 bg-clip-text text-transparent tracking-[0.22em] uppercase font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]"
+              >
                 {cardholderName}
               </span>
             </div>
 
             <div className="text-right">
-              <span className="block text-[8px] font-mono uppercase tracking-widest text-slate-400">
-                3D TILT HOLOGRAM
+              <span className="block text-[8px] font-mono uppercase tracking-widest text-amber-200/70">
+                3D TITANIUM FOIL
               </span>
-              <span className="text-[10px] text-slate-200 tracking-[0.2em] uppercase font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] flex items-center gap-1 justify-end">
-                <Sparkles className="w-3 h-3 text-amber-400" />
+              <span className="text-[10px] bg-gradient-to-r from-white via-amber-200 to-amber-400 bg-clip-text text-transparent tracking-[0.2em] uppercase font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] flex items-center gap-1 justify-end">
+                <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
                 {isProActive ? "VAULT ACTIVE" : "BLACK EDITION"}
               </span>
             </div>
@@ -629,15 +669,15 @@ export const ProView: React.FC<ProViewProps> = ({
       </div>
 
       {/* =====================================================================
-          2. TRUECALLER-STYLE GOLD / PLATINUM ELITE CAROUSEL & FEATURE SWIPE BULLETS
+          2. JUICY TRUECALLER GOLD & PLATINUM CAROUSEL
          ===================================================================== */}
-      <section className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.95),0_0_24px_rgba(251,191,36,0.12)] space-y-4 overflow-hidden">
+      <section className="bg-[#080d16]/90 backdrop-blur-xl border border-white/10 border-t border-t-white/20 rounded-2xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.7)] space-y-4">
         <div className="flex items-center justify-between gap-2">
           <div>
             <span className="block text-[10px] font-mono font-black uppercase tracking-[0.22em] bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent">
               TRUECALLER-STYLE SOVEREIGN TIERS
             </span>
-            <h3 className="text-base font-black tracking-tight mt-0.5 bg-gradient-to-r from-amber-300 via-yellow-200 to-yellow-500 bg-clip-text text-transparent">
+            <h3 className="text-base font-black tracking-tight mt-0.5 bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 bg-clip-text text-transparent">
               Gold &amp; Platinum Elite Membership
             </h3>
           </div>
@@ -646,9 +686,9 @@ export const ProView: React.FC<ProViewProps> = ({
           </span>
         </div>
 
-        {/* Truecaller Gold / Platinum Swipeable Card Carousel */}
-        <div className="flex gap-3.5 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none -mx-1 px-1">
-          {/* Card 1: "PRO GOLD EDITION" (₹39/mo, strikethrough ₹99) with metallic gold sheen and shield insignia */}
+        {/* Truecaller Gold / Platinum Swipeable Card Carousel (No Clipping) */}
+        <div className="flex gap-4 overflow-x-auto py-2 px-1 -mx-1 snap-x snap-mandatory scrollbar-none">
+          {/* Card 1: PRO GOLD (₹39) — Rich warm liquid gold gradient with crisp 24K gold border */}
           <div
             onClick={() => {
               playProVaultChime();
@@ -659,32 +699,33 @@ export const ProView: React.FC<ProViewProps> = ({
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") setSelectedPlan("monthly");
             }}
-            className={`snap-center shrink-0 w-[262px] rounded-2xl p-4 border text-left transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden ${
+            className={`snap-center shrink-0 w-[85%] sm:w-[272px] min-h-[172px] rounded-2xl p-4 text-left transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-[#241a06] via-[#3a2c0f] to-[#120e05] border border-amber-400/60 border-t border-t-amber-200/50 ${
               selectedPlan === "monthly"
-                ? "bg-gradient-to-br from-[#332407] via-[#1c1406] to-[#0a0e17] border-2 border-amber-400 shadow-[0_0_28px_rgba(251,191,36,0.45),inset_0_1px_1px_rgba(254,243,199,0.35)] scale-[1.01]"
-                : "bg-gradient-to-br from-[#1f1606]/90 via-[#120d05]/90 to-[#0a0e17] border-amber-500/30 hover:border-amber-400/60 opacity-90"
+                ? "ring-2 ring-amber-400 shadow-[0_10px_30px_rgba(0,0,0,0.85),0_0_24px_rgba(251,191,36,0.35)]"
+                : "shadow-[0_8px_24px_rgba(0,0,0,0.7),0_0_12px_rgba(251,191,36,0.12)] opacity-90 hover:opacity-100"
             }`}
           >
-            {/* Metallic Gold Sheen Overlay */}
+            {/* Liquid Gold Metallic Sheen Overlay */}
             <div
-              className="pointer-events-none absolute inset-0 opacity-25"
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 opacity-35"
               style={{
                 background:
-                  "linear-gradient(125deg, rgba(251,191,36,0.28) 0%, transparent 45%, rgba(245,158,11,0.18) 100%)",
+                  "linear-gradient(125deg, rgba(251,191,36,0.32) 0%, transparent 48%, rgba(245,158,11,0.22) 100%)",
               }}
             />
 
             <div className="relative z-10 space-y-2.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950 font-mono text-[9px] font-black uppercase tracking-widest shadow-[0_0_12px_rgba(251,191,36,0.6)]">
-                  <Shield className="w-3 h-3 fill-slate-950 text-slate-950" />
-                  <span>GOLD SHIELD</span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 text-black border border-amber-100/60 font-mono text-[9px] font-black uppercase tracking-widest shadow-[0_0_12px_rgba(251,191,36,0.5)]">
+                  <Shield className="w-3 h-3 fill-black text-black" />
+                  <span>24K GOLD SHIELD</span>
                 </span>
                 <span
                   className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
                     selectedPlan === "monthly"
-                      ? "border-amber-300 bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950"
-                      : "border-amber-400/40"
+                      ? "border-amber-200 bg-gradient-to-r from-amber-300 to-yellow-500 text-black"
+                      : "border-amber-400/50"
                   }`}
                 >
                   {selectedPlan === "monthly" && <Check className="w-3 h-3 stroke-[3]" />}
@@ -693,31 +734,33 @@ export const ProView: React.FC<ProViewProps> = ({
 
               <div className="flex items-center gap-1.5">
                 <Crown className="w-4 h-4 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)] shrink-0" />
-                <h4 className="text-sm font-black bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent tracking-wider uppercase">
+                <h4 className="text-sm font-black bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent tracking-wider uppercase">
                   PRO GOLD EDITION
                 </h4>
               </div>
 
               <div className="flex items-baseline gap-1.5 pt-0.5">
-                <span className="font-mono text-2xl font-black text-amber-300 tabular-nums">
+                <span className="font-mono text-2xl font-black text-amber-300 drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)] tabular-nums">
                   ₹39
                 </span>
                 <span className="font-mono text-xs text-amber-200/50 line-through tabular-nums">
                   ₹99
                 </span>
-                <span className="text-[11px] font-mono text-amber-100/80">/ month</span>
+                <span className="text-[11px] font-mono text-amber-100/90 font-semibold">
+                  / month
+                </span>
               </div>
             </div>
 
-            <div className="relative z-10 pt-3 mt-3 border-t border-amber-400/20 flex items-center justify-between text-[10px] font-mono text-amber-200/90">
-              <span>Metallic Gold Shield</span>
+            <div className="relative z-10 pt-3 mt-3 border-t border-amber-400/30 flex items-center justify-between text-[10px] font-mono text-amber-100">
+              <span>Liquid Gold Vault Pass</span>
               <span className="font-black text-amber-300">
                 {selectedPlan === "monthly" ? "Selected ✓" : "Tap to Select →"}
               </span>
             </div>
           </div>
 
-          {/* Card 2: "PRO PLATINUM ELITE" (₹99 / 3 Months - Strikethrough ₹117, Save 15%) with electric blue-gold iridescent finish */}
+          {/* Card 2: PRO PLATINUM ELITE (₹99) — Electric cyber blue-gold Damascus steel finish */}
           <div
             onClick={() => {
               playProVaultChime();
@@ -728,32 +771,41 @@ export const ProView: React.FC<ProViewProps> = ({
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") setSelectedPlan("quarterly");
             }}
-            className={`snap-center shrink-0 w-[276px] rounded-2xl p-4 border text-left transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden ${
+            className={`snap-center shrink-0 w-[85%] sm:w-[272px] min-h-[172px] rounded-2xl p-4 text-left transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-[#0b2239] via-[#131d36] to-[#261b08] border border-cyan-400/50 border-t border-t-cyan-200/50 shadow-[0_0_20px_rgba(6,182,212,0.2)] ${
               selectedPlan === "quarterly"
-                ? "bg-gradient-to-br from-[#0c273d] via-[#131830] to-[#261b08] border-2 border-amber-400 shadow-[0_0_32px_rgba(251,191,36,0.45),0_0_20px_rgba(6,182,212,0.35),inset_0_1px_1px_rgba(255,255,255,0.3)] scale-[1.01]"
-                : "bg-gradient-to-br from-[#0a1c2e]/90 via-[#0e1326]/90 to-[#1c1407]/90 border-cyan-400/35 hover:border-amber-300/70 opacity-90"
+                ? "ring-2 ring-cyan-400 shadow-[0_10px_30px_rgba(0,0,0,0.9),0_0_24px_rgba(6,182,212,0.35),0_0_16px_rgba(251,191,36,0.25)]"
+                : "opacity-90 hover:opacity-100"
             }`}
           >
-            {/* Electric Blue-Gold Iridescent Foil Finish */}
+            {/* Damascus Steel & Cyber Blue-Gold Foil Texture */}
             <div
-              className="pointer-events-none absolute inset-0 opacity-30"
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 opacity-35"
               style={{
                 background:
-                  "linear-gradient(135deg, rgba(6,182,212,0.35) 0%, rgba(59,130,246,0.18) 48%, rgba(251,191,36,0.35) 100%)",
+                  "linear-gradient(135deg, rgba(6,182,212,0.38) 0%, rgba(30,64,175,0.22) 48%, rgba(251,191,36,0.38) 100%)",
+              }}
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 opacity-20"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(115deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 1px, transparent 1px, transparent 7px)",
               }}
             />
 
             <div className="relative z-10 space-y-2.5">
               <div className="flex items-center justify-between gap-1.5">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950 font-mono text-[9px] font-black uppercase tracking-widest shadow-[0_0_14px_rgba(251,191,36,0.75)]">
-                  <Sparkles className="w-3 h-3 fill-slate-950 text-slate-950" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-gradient-to-r from-amber-300 via-yellow-400 to-cyan-300 text-black font-mono text-[9px] font-black uppercase tracking-widest shadow-[0_0_14px_rgba(6,182,212,0.5)]">
+                  <Sparkles className="w-3 h-3 fill-black text-black" />
                   <span>SAVE 15% · 3-MONTH ELITE</span>
                 </span>
                 <span
                   className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
                     selectedPlan === "quarterly"
-                      ? "border-amber-300 bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950"
-                      : "border-cyan-400/40"
+                      ? "border-cyan-200 bg-gradient-to-r from-cyan-300 to-amber-400 text-black"
+                      : "border-cyan-400/50"
                   }`}
                 >
                   {selectedPlan === "quarterly" && <Check className="w-3 h-3 stroke-[3]" />}
@@ -761,17 +813,17 @@ export const ProView: React.FC<ProViewProps> = ({
               </div>
 
               <div className="flex items-center gap-1.5">
-                <Shield className="w-4 h-4 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.85)] shrink-0" />
-                <h4 className="text-sm font-black bg-gradient-to-r from-amber-300 via-yellow-200 to-cyan-200 bg-clip-text text-transparent tracking-wider uppercase">
+                <Shield className="w-4 h-4 text-cyan-300 drop-shadow-[0_0_8px_rgba(6,182,212,0.85)] shrink-0" />
+                <h4 className="text-sm font-black bg-gradient-to-r from-cyan-200 via-amber-200 to-amber-400 bg-clip-text text-transparent tracking-wider uppercase">
                   PRO PLATINUM ELITE
                 </h4>
               </div>
 
               <div className="flex items-baseline gap-1.5 pt-0.5 flex-wrap">
-                <span className="font-mono text-2xl font-black text-white drop-shadow-[0_0_10px_rgba(251,191,36,0.5)] tabular-nums">
+                <span className="font-mono text-2xl font-black text-white drop-shadow-[0_0_10px_rgba(6,182,212,0.5)] tabular-nums">
                   ₹99
                 </span>
-                <span className="font-mono text-xs text-slate-400 line-through tabular-nums">
+                <span className="font-mono text-xs text-slate-300/60 line-through tabular-nums">
                   ₹117
                 </span>
                 <span className="text-[10px] font-mono text-amber-300 font-bold">
@@ -780,8 +832,8 @@ export const ProView: React.FC<ProViewProps> = ({
               </div>
             </div>
 
-            <div className="relative z-10 pt-3 mt-3 border-t border-cyan-400/25 flex items-center justify-between text-[10px] font-mono text-cyan-100">
-              <span>3-Month Elite Vault (₹33/mo)</span>
+            <div className="relative z-10 pt-3 mt-3 border-t border-cyan-400/30 flex items-center justify-between text-[10px] font-mono text-cyan-100">
+              <span>Damascus Steel Vault (₹33/mo)</span>
               <span className="font-black text-amber-300">
                 {selectedPlan === "quarterly" ? "Active Choice ★" : "Select Elite →"}
               </span>
@@ -806,7 +858,7 @@ export const ProView: React.FC<ProViewProps> = ({
             ].map((bullet) => (
               <div
                 key={bullet}
-                className="snap-start shrink-0 px-3 py-2 rounded-xl bg-[#05070c] border border-white/10 shadow-[0_4px_14px_rgba(0,0,0,0.6),0_0_12px_rgba(251,191,36,0.12)] flex items-center gap-2 text-xs font-bold text-slate-100 whitespace-nowrap"
+                className="snap-start shrink-0 px-3 py-2 rounded-xl bg-[#05080f] border border-white/10 border-t border-t-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.6)] flex items-center gap-2 text-xs font-bold text-slate-100 whitespace-nowrap"
               >
                 <span>{bullet}</span>
               </div>
@@ -814,26 +866,26 @@ export const ProView: React.FC<ProViewProps> = ({
           </div>
         </div>
 
-        {/* High-Gloss Inline Trigger Button */}
+        {/* Champagne Gold Inline Trigger Button */}
         <button
           type="button"
           onClick={() => handleOpenCheckoutDrawer(selectedPlan)}
-          className="relative overflow-hidden w-full min-h-[48px] rounded-2xl text-xs uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950 font-black tracking-wider shadow-[0_0_28px_rgba(251,191,36,0.55)] hover:brightness-110 group"
+          className="relative overflow-hidden w-full min-h-[48px] rounded-xl text-xs uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-black font-extrabold tracking-wider border border-amber-100/70 shadow-[0_0_25px_rgba(251,191,36,0.45),inset_0_1px_1px_rgba(255,255,255,0.75)] hover:brightness-105 group"
         >
-          {/* High-gloss sliding reflection sheen */}
+          {/* Continuous soft light reflection animation */}
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent skew-x-[-25deg] animate-[pulse_2.2s_ease-in-out_infinite] group-hover:translate-x-[320%] transition-transform duration-1000"
+            className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/75 to-transparent skew-x-[-25deg] animate-[pulse_2s_ease-in-out_infinite] group-hover:translate-x-[320%] transition-transform duration-1000"
           />
-          <Crown className="w-4 h-4 fill-current text-slate-950 relative z-10 shrink-0" />
+          <Crown className="w-4 h-4 fill-black text-black relative z-10 shrink-0" />
           <span className="relative z-10">{selectedPlanCtaLabel}</span>
         </button>
       </section>
 
       {/* =====================================================================
-          3. PRO-EXCLUSIVE FEATURE SUITE (4 ELITE MODULES)
+          3. PRO-EXCLUSIVE FEATURE SUITE (ELEVATED FLOATING GLASS CONTAINERS)
          ===================================================================== */}
-      <div className="space-y-3.5">
+      <div className="space-y-4">
         <div className="px-1 flex items-center justify-between">
           <span className="text-[11px] font-black uppercase tracking-[0.2em] bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent font-mono">
             PRO-EXCLUSIVE FEATURE SUITE
@@ -843,7 +895,7 @@ export const ProView: React.FC<ProViewProps> = ({
 
         {/* FEATURE 1: SAVAGE JARVIS UNCAPPED MODE */}
         <section
-          className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(6,182,212,0.08)]"
+          className="bg-[#080d16]/90 backdrop-blur-xl border border-white/10 border-t border-t-white/20 rounded-2xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.7)] space-y-3.5"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5">
@@ -903,7 +955,7 @@ export const ProView: React.FC<ProViewProps> = ({
 
         {/* FEATURE 2: AUTONOMOUS AUTO-PILOT RECOVERY AGENT (1-TIME INITIAL PERMISSION) */}
         <section
-          className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(6,182,212,0.08)]"
+          className="bg-[#080d16]/90 backdrop-blur-xl border border-white/10 border-t border-t-white/20 rounded-2xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.7)] space-y-3.5"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5">
@@ -962,7 +1014,7 @@ export const ProView: React.FC<ProViewProps> = ({
             </span>
           </div>
 
-          {/* Automatically Queued Overdue Debts (No manual card-by-card clicks required) */}
+          {/* Automatically Queued Overdue Debts */}
           <div className="space-y-2 pt-0.5">
             {debtors.map(({ friend, net }) => (
               <div
@@ -997,7 +1049,7 @@ export const ProView: React.FC<ProViewProps> = ({
 
         {/* FEATURE 3: CUSTOM THEME STUDIO */}
         <section
-          className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 space-y-3.5 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(251,191,36,0.08)]"
+          className="bg-[#080d16]/90 backdrop-blur-xl border border-white/10 border-t border-t-white/20 rounded-2xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.7)] space-y-3.5"
         >
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-2.5">
@@ -1021,7 +1073,7 @@ export const ProView: React.FC<ProViewProps> = ({
           </div>
 
           {/* Custom Color Picker + Name + Glow Intensity */}
-          <div className="p-3 rounded-2xl bg-slate-950/90 border border-white/10 space-y-3">
+          <div className="p-3.5 rounded-2xl bg-[#05070c]/95 border border-white/10 space-y-3">
             <div className="flex items-center gap-2.5">
               <label
                 className="relative flex items-center justify-center w-11 h-11 rounded-2xl border-2 border-white/20 cursor-pointer overflow-hidden shrink-0 shadow-lg"
@@ -1134,7 +1186,7 @@ export const ProView: React.FC<ProViewProps> = ({
 
         {/* FEATURE 4: EXECUTIVE STARK MONTHLY AUDIT (PDF / DOSSIER EXPORT) */}
         <section
-          className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(16,185,129,0.08)]"
+          className="bg-[#080d16]/90 backdrop-blur-xl border border-white/10 border-t border-t-white/20 rounded-2xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.7)] space-y-3.5"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5">
@@ -1232,7 +1284,7 @@ export const ProView: React.FC<ProViewProps> = ({
           4. SMART PERIMETER ALERTS & 90% AUTO-LOCKDOWN
          ===================================================================== */}
       <section
-        className="p-4 rounded-3xl border border-white/10 bg-[#0a0e17] space-y-3.5 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(6,182,212,0.08)]"
+        className="bg-[#080d16]/90 backdrop-blur-xl border border-white/10 border-t border-t-white/20 rounded-2xl p-5 shadow-[0_8px_32px_rgba(0,0,0,0.7)] space-y-3.5"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1325,20 +1377,20 @@ export const ProView: React.FC<ProViewProps> = ({
         </button>
       </section>
 
-      {/* TRUECALLER-STYLE BOTTOM STICKY CTA BAR WITH HIGH-GLOSS SLIDING REFLECTION */}
+      {/* POLISHED STICKY BOTTOM CTA WITH RICH CHAMPAGNE GOLD GRADIENT & METALLIC BORDER */}
       <div className="sticky bottom-2 z-20 pt-1">
-        <div className="p-2 rounded-2xl bg-[#020306]/95 backdrop-blur-2xl border border-cyan-500/30 shadow-[0_-10px_30px_rgba(0,0,0,0.95),0_0_25px_rgba(251,191,36,0.28)]">
+        <div className="p-2 rounded-2xl bg-[#050811]/95 backdrop-blur-2xl border border-amber-400/35 border-t border-t-amber-200/40 shadow-[0_-12px_35px_rgba(0,0,0,0.95),0_0_25px_rgba(251,191,36,0.22)]">
           <button
             type="button"
             onClick={() => handleOpenCheckoutDrawer(selectedPlan)}
-            className="relative overflow-hidden w-full min-h-[48px] px-4 rounded-xl bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_24px_rgba(251,191,36,0.65)] active:scale-[0.98] transition-all cursor-pointer group"
+            className="relative overflow-hidden w-full min-h-[50px] px-4 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-black font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border border-amber-100/80 shadow-[0_0_25px_rgba(251,191,36,0.55),inset_0_1px_1px_rgba(255,255,255,0.8)] active:scale-[0.98] transition-all cursor-pointer group"
           >
-            {/* Continuous + Hover High-Gloss Sliding Reflection Animation */}
+            {/* Continuous Soft Light Reflection Animation */}
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/80 to-transparent skew-x-[-25deg] translate-x-[-120%] group-hover:translate-x-[320%] transition-transform duration-1000 animate-[pulse_1.8s_ease-in-out_infinite]"
+              className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/80 to-transparent skew-x-[-25deg] animate-[pulse_2s_ease-in-out_infinite] group-hover:translate-x-[340%] transition-transform duration-1000"
             />
-            <Crown className="w-4 h-4 fill-slate-950 text-slate-950 relative z-10 shrink-0" />
+            <Crown className="w-4 h-4 fill-black text-black relative z-10 shrink-0" />
             <span className="relative z-10 whitespace-nowrap">
               {selectedPlanCtaLabel}
             </span>
@@ -1441,7 +1493,7 @@ export const ProView: React.FC<ProViewProps> = ({
                   {selectedPlanTitle} · ₹{selectedPlanAmount}
                 </h3>
                 <p className="text-[11px] font-mono text-slate-400">
-                  Merchant UPI: <strong className="text-cyan-300">mrigander@upi</strong>
+                  Receiving UPI: <strong className="text-cyan-300">{activeReceivingUpi}</strong>
                 </p>
               </div>
               <button
@@ -1458,7 +1510,7 @@ export const ProView: React.FC<ProViewProps> = ({
               <div className="p-3 rounded-2xl bg-white shadow-[0_0_28px_rgba(251,191,36,0.4)] border-2 border-amber-400">
                 <QRCodeSVG
                   value={proUpiDeepLink}
-                  size={152}
+                  size={140}
                   bgColor="#ffffff"
                   fgColor="#020617"
                   level="M"
@@ -1470,7 +1522,7 @@ export const ProView: React.FC<ProViewProps> = ({
             </div>
 
             {/* 1-Tap Google Pay / PhonePe / Paytm Deep-Links */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <span className="block text-[10px] font-mono font-black uppercase tracking-widest text-slate-400 text-center">
                 1-TAP INSTANT UPI DEEP-LINKS
               </span>
@@ -1481,7 +1533,7 @@ export const ProView: React.FC<ProViewProps> = ({
                     e.preventDefault();
                     handleLaunchUpiApp(gpayDeepLink, "Google Pay");
                   }}
-                  className="h-10 rounded-xl bg-[#131b2e] hover:bg-[#19233b] border border-cyan-400/50 text-xs font-black text-cyan-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                  className="h-9 rounded-xl bg-[#131b2e] hover:bg-[#19233b] border border-cyan-400/50 text-xs font-black text-cyan-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
                 >
                   <Zap className="w-3.5 h-3.5 text-cyan-400" />
                   <span>GPay</span>
@@ -1493,7 +1545,7 @@ export const ProView: React.FC<ProViewProps> = ({
                     e.preventDefault();
                     handleLaunchUpiApp(phonePeDeepLink, "PhonePe");
                   }}
-                  className="h-10 rounded-xl bg-[#1a132e] hover:bg-[#23193d] border border-purple-400/50 text-xs font-black text-purple-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                  className="h-9 rounded-xl bg-[#1a132e] hover:bg-[#23193d] border border-purple-400/50 text-xs font-black text-purple-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
                 >
                   <Zap className="w-3.5 h-3.5 text-purple-400" />
                   <span>PhonePe</span>
@@ -1505,12 +1557,42 @@ export const ProView: React.FC<ProViewProps> = ({
                     e.preventDefault();
                     handleLaunchUpiApp(paytmDeepLink, "Paytm");
                   }}
-                  className="h-10 rounded-xl bg-[#0f2133] hover:bg-[#152c44] border border-sky-400/50 text-xs font-black text-sky-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                  className="h-9 rounded-xl bg-[#0f2133] hover:bg-[#152c44] border border-sky-400/50 text-xs font-black text-sky-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
                 >
                   <Zap className="w-3.5 h-3.5 text-sky-400" />
                   <span>Paytm</span>
                 </a>
               </div>
+            </div>
+
+            {/* Transaction Reference / UTR Number Verification */}
+            <div className="p-3 rounded-2xl bg-[#060911] border border-amber-400/35 space-y-1.5">
+              <label
+                htmlFor="pro-checkout-utr-input"
+                className="block text-[10px] font-mono font-black uppercase tracking-widest text-amber-300"
+              >
+                Enter Transaction Reference / UTR Number
+              </label>
+              <input
+                id="pro-checkout-utr-input"
+                type="text"
+                value={proUtrInput}
+                onChange={(e) => {
+                  setProUtrInput(e.target.value);
+                  if (proUtrError) setProUtrError(null);
+                }}
+                placeholder="Enter 12-digit UPI Ref / UTR Number (e.g. 429810394812)"
+                className="w-full h-10 px-3 rounded-xl bg-slate-950 border border-amber-400/40 text-xs font-mono text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+              />
+              {proUtrError ? (
+                <p className="text-[10px] font-mono text-rose-400 font-bold">
+                  {proUtrError}
+                </p>
+              ) : (
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  Complete the ₹{selectedPlanAmount} UPI transfer above, then enter your UTR / Reference ID to verify &amp; unlock PRO.
+                </p>
+              )}
             </div>
 
             {/* Confirm & Unlock Vault Action */}
@@ -1530,18 +1612,29 @@ export const ProView: React.FC<ProViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  const cleanedUtr = proUtrInput.trim();
+                  if (!/^\d{12}$/.test(cleanedUtr)) {
+                    setProUtrError(
+                      "Please enter a valid 12-digit numeric UPI UTR / Reference Number (e.g. 429810394812) to verify payment."
+                    );
+                    return;
+                  }
+                  localStorage.setItem("kharche_pro_utr_v1", cleanedUtr);
+                  setProUtrError(null);
                   playProVaultChime();
                   if (!isProActive) {
                     fireConfettiBurst("#fbbf24");
                     onTogglePro();
                   }
                   setIsCheckoutDrawerOpen(false);
-                  onShowToast?.(`👑 ${selectedPlanTitle} Activated!`);
+                  onShowToast?.(
+                    `👑 ${selectedPlanTitle} Verified (UTR: ${cleanedUtr}) & Activated!`
+                  );
                 }}
                 className="h-11 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(251,191,36,0.45)] cursor-pointer active:scale-95 transition-transform"
               >
                 <Check className="w-4 h-4 stroke-[3]" />
-                <span>Unlock Vault</span>
+                <span>Verify &amp; Unlock</span>
               </button>
             </div>
           </div>

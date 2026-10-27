@@ -62,40 +62,6 @@ interface OcrExtractedResult {
   itemsSummary: string;
 }
 
-const DEMO_RECEIPTS: Array<{
-  label: string;
-  vendor: string;
-  amount: number;
-  category: ExpenseCategory;
-  paymentMode: PaymentMode;
-  items: string;
-}> = [
-  {
-    label: "☕ Third Wave Coffee (₹340)",
-    vendor: "Third Wave Coffee",
-    amount: 340,
-    category: "Chai & Snacks",
-    paymentMode: "UPI",
-    items: "1x Iced Vietnamese Latte, 1x Classic Croissant",
-  },
-  {
-    label: "🍗 Empire Restaurant (₹580)",
-    vendor: "Empire Restaurant",
-    amount: 580,
-    category: "Food",
-    paymentMode: "UPI",
-    items: "1x Butter Chicken, 3x Coin Parotta, 1x Lime Soda",
-  },
-  {
-    label: "⛽ IndianOil Fuel Slip (₹450)",
-    vendor: "IndianOil Fuel Station",
-    amount: 450,
-    category: "Transport",
-    paymentMode: "UPI",
-    items: "Petrol 4.35L @ ₹103.4/L",
-  },
-];
-
 interface NfcTapPreset {
   id: string;
   badge: string;
@@ -150,32 +116,7 @@ const NFC_TAP_PRESETS: NfcTapPreset[] = [
   },
 ];
 
-function createSyntheticReceiptBase64(demo: (typeof DEMO_RECEIPTS)[number]): string {
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = 400;
-    canvas.height = 260;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return "";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, 400, 260);
-    ctx.fillStyle = "#0f172a";
-    ctx.font = "bold 20px monospace";
-    ctx.fillText(demo.vendor.toUpperCase(), 24, 45);
-    ctx.font = "13px monospace";
-    ctx.fillText("TAX INVOICE / CASH MEMO", 24, 70);
-    ctx.fillText("--------------------------------", 24, 92);
-    ctx.fillText(demo.items.slice(0, 36), 24, 120);
-    ctx.fillText("--------------------------------", 24, 150);
-    ctx.font = "bold 22px monospace";
-    ctx.fillText(`GRAND TOTAL: Rs. ${demo.amount}.00`, 24, 185);
-    ctx.font = "13px monospace";
-    ctx.fillText(`PAID VIA: ${demo.paymentMode}`, 24, 218);
-    return canvas.toDataURL("image/jpeg", 0.85);
-  } catch {
-    return "";
-  }
-}
+
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   isOpen,
@@ -415,8 +356,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   const runGeminiVisionOcr = async (
     base64DataUrl: string,
     mimeType: string,
-    fileName?: string,
-    fallbackPreset?: (typeof DEMO_RECEIPTS)[number]
+    fileName?: string
   ) => {
     setError("");
     setIsScanningOcr(true);
@@ -435,42 +375,40 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       });
 
       const contentType = response.headers.get("content-type") || "";
-      if (!response.ok || !contentType.includes("application/json")) {
-        throw new Error("OCR server unavailable");
+      if (!contentType.includes("application/json")) {
+        throw new Error("Receipt scan unreadable or API key missing. Please enter manually.");
       }
 
       const data = await response.json();
+      if (!response.ok || data.error) {
+        throw new Error(
+          data.error || "Receipt scan unreadable or API key missing. Please enter manually."
+        );
+      }
+
+      const cleanVendor = typeof data.vendor === "string" ? data.vendor.trim() : "";
+      const parsedAmount = Number(data.amount);
+
+      if (!cleanVendor || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+        throw new Error("Receipt scan unreadable or API key missing. Please enter manually.");
+      }
+
       const extracted: OcrExtractedResult = {
-        vendor: data.vendor || fallbackPreset?.vendor || "Scanned Merchant",
-        amount: Number(data.amount) || fallbackPreset?.amount || 250,
+        vendor: cleanVendor,
+        amount: Math.round(parsedAmount),
         category: (CATEGORIES.includes(data.category)
           ? data.category
-          : fallbackPreset?.category || "Food") as ExpenseCategory,
+          : "Food") as ExpenseCategory,
         paymentMode: (PAYMENT_MODES.includes(data.paymentMode)
           ? data.paymentMode
-          : fallbackPreset?.paymentMode || "UPI") as PaymentMode,
-        itemsSummary: data.itemsSummary || fallbackPreset?.items || "Extracted via Gemini Vision OCR",
+          : "UPI") as PaymentMode,
+        itemsSummary: data.itemsSummary || "Extracted via Gemini Vision OCR",
       };
       populateFieldsFromOcr(extracted);
     } catch {
-      const fallback: OcrExtractedResult = fallbackPreset
-        ? {
-            vendor: fallbackPreset.vendor,
-            amount: fallbackPreset.amount,
-            category: fallbackPreset.category,
-            paymentMode: fallbackPreset.paymentMode,
-            itemsSummary: fallbackPreset.items,
-          }
-        : {
-            vendor: fileName
-              ? fileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ")
-              : "Scanned Bill Receipt",
-            amount: 320,
-            category: "Food",
-            paymentMode: "UPI",
-            itemsSummary: "Extracted via Stark Optical Scanner",
-          };
-      populateFieldsFromOcr(fallback);
+      setOcrResult(null);
+      setError("Receipt scan unreadable or API key missing. Please enter manually.");
+      playLockdownThud();
     } finally {
       setIsScanningOcr(false);
     }
@@ -858,29 +796,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               </button>
             </div>
 
-            {/* 1-Tap Demo Sample Receipts for Instant Testing */}
-            <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                Instant Demo Bill Scan (1-Tap Gemini Vision Test):
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {DEMO_RECEIPTS.map((demo) => (
-                  <button
-                    key={demo.label}
-                    type="button"
-                    disabled={isScanningOcr}
-                    onClick={() => {
-                      const imgData = createSyntheticReceiptBase64(demo);
-                      void runGeminiVisionOcr(imgData, "image/jpeg", demo.vendor, demo);
-                    }}
-                    className="px-2.5 py-1 rounded-xl bg-slate-900/90 border border-white/10 hover:border-emerald-400/50 text-[10px] font-semibold text-slate-300 hover:text-emerald-200 transition-all cursor-pointer shadow-xs"
-                  >
-                    {demo.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Scanning Progress & Image Preview */}
             {isScanningOcr && (
               <div className="p-4 rounded-2xl border border-cyan-400/40 bg-slate-900/90 flex flex-col items-center justify-center gap-2 text-center animate-pulse">
@@ -891,6 +806,44 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                 <p className="text-[11px] text-slate-400">
                   Extracting Merchant Name, Grand Total, and Category
                 </p>
+              </div>
+            )}
+
+            {/* OCR Friendly Error Alert (Never injects fake transaction amounts) */}
+            {error && !isScanningOcr && (
+              <div
+                role="alert"
+                className="p-3.5 rounded-2xl border border-rose-500/40 bg-rose-950/35 text-rose-200 space-y-2.5 animate-in fade-in duration-200"
+              >
+                <div className="flex items-start gap-2.5">
+                  <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-rose-100">{error}</p>
+                    <p className="text-[11px] text-rose-200/80 leading-snug">
+                      Zero fake amounts injected. Switch to manual entry or try a clearer receipt photo.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError("");
+                      setActiveTab("manual");
+                    }}
+                    className="flex-1 h-9 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-xs font-bold text-rose-100 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Enter Manually</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => uploadInputRef.current?.click()}
+                    className="px-3 h-9 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-semibold text-slate-300 cursor-pointer transition-colors"
+                  >
+                    Retry Photo
+                  </button>
+                </div>
               </div>
             )}
 
@@ -988,8 +941,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                 </div>
               </div>
             )}
-
-            {error && <p className="text-[11px] font-medium text-rose-400">{error}</p>}
           </div>
         )}
 

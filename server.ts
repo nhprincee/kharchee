@@ -496,12 +496,61 @@ function buildDynamicJarvisReply(
   return `Systems nominal, Sir! You have deployed ₹${spent} today with a solid ₹${rem} intact in reserve (${pct}% used). Exemplary financial discipline worthy of Stark Industries. How may I assist your mission?`;
 }
 
+const GEMINI_TEXT_MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
+const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
+
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 30;
+const ipRequestTimestamps = new Map<string, number[]>();
+
+function apiRateLimiter(req: Request, res: Response, next: () => void) {
+  const forwarded = req.headers["x-forwarded-for"];
+  const clientIp =
+    (typeof forwarded === "string" ? forwarded.split(",")[0].trim() : "") ||
+    req.ip ||
+    req.socket?.remoteAddress ||
+    "unknown";
+
+  const now = Date.now();
+  const windowStart = now - RATE_LIMIT_WINDOW_MS;
+  const recentTimestamps = (ipRequestTimestamps.get(clientIp) || []).filter(
+    (ts) => ts > windowStart
+  );
+
+  if (recentTimestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    res.status(429).json({
+      error: "Too many requests. Please wait a moment before trying again.",
+    });
+    return;
+  }
+
+  recentTimestamps.push(now);
+  ipRequestTimestamps.set(clientIp, recentTimestamps);
+  next();
+}
+
+function isValidExpenseAmount(val: unknown): val is number {
+  const num = Number(val);
+  return Number.isFinite(num) && num > 0 && num <= 1000000;
+}
+
+function isValidDailyLimit(val: unknown): val is number {
+  const num = Number(val);
+  return Number.isFinite(num) && num >= 50 && num <= 1000000;
+}
+
+function isValidKhataAmount(val: unknown): val is number {
+  const num = Number(val);
+  return Number.isFinite(num) && num !== 0 && Math.abs(num) <= 1000000;
+}
+
 function buildGeminiPayload(
   userPrompt: string,
   snapshot?: FinancialSnapshot,
   mode?: "roast" | "advice",
   history?: ClientChatMessage[]
 ) {
+  const safeUserPrompt = userPrompt.slice(0, 1000);
   const limit = snapshot?.dailyLimit ?? 1000;
   const spent = snapshot?.todaySpent ?? 0;
   const diff = snapshot?.remaining ?? limit - spent;
@@ -544,10 +593,18 @@ function buildGeminiPayload(
 
   if (history && Array.isArray(history) && history.length > 0) {
     for (const item of history.slice(-8)) {
-      if (!item.text || item.text.startsWith("Good day, Sir") || item.text.startsWith("Arey Seth ji!")) continue;
+      if (!item.text || typeof item.text !== "string") continue;
+      const truncatedHistoryText = item.text.trim().slice(0, 500);
+      if (
+        !truncatedHistoryText ||
+        truncatedHistoryText.startsWith("Good day, Sir") ||
+        truncatedHistoryText.startsWith("Arey Seth ji!")
+      ) {
+        continue;
+      }
       turns.push({
         role: item.role === "user" ? "user" : "model",
-        parts: [{ text: item.text }],
+        parts: [{ text: truncatedHistoryText }],
       });
     }
   }
@@ -558,7 +615,7 @@ function buildGeminiPayload(
       {
         text: `Live Telemetry: Today Limit: ₹${limit}, Spent: ₹${spent}, Remaining: ₹${diff}, ${percentage}% used, Score: ${disciplineScore}/900, Lockdown: ${
           lockdownActive ? "ON" : "OFF"
-        }. Mode preference: ${mode || "general"}.\n\nUser Question: "${userPrompt}"`,
+        }. Mode preference: ${mode || "general"}.\n\nUser Question: "${safeUserPrompt}"`,
       },
     ],
   });
@@ -568,7 +625,18 @@ function buildGeminiPayload(
 
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: "12mb" }));
+  const defaultJsonParser = express.json({ limit: "256kb" });
+  const ocrReceiptJsonParser = express.json({ limit: "8mb" });
+
+  app.use((req: Request, res: Response, next: () => void) => {
+    if (req.path === "/api/ocr/receipt") {
+      next();
+      return;
+    }
+    defaultJsonParser(req, res, next);
+  });
+
+  app.use("/api", apiRateLimiter);
 
   // Real-Time Streaming Endpoint (SSE)
   app.post("/api/jarvis/stream", async (req: Request, res: Response) => {
@@ -586,7 +654,9 @@ async function startServer() {
       history?: ClientChatMessage[];
     };
 
-    const userPrompt = (prompt || message || query || "Protocol Status, Sir").trim();
+    const userPrompt = String(prompt || message || query || "Protocol Status, Sir")
+      .trim()
+      .slice(0, 1000);
     const preDetectedAction = extractIntentAction(userPrompt);
 
     const ai = getGenAIClient();
@@ -635,7 +705,7 @@ async function startServer() {
       );
 
       const stream = await ai.models.generateContentStream({
-        model: "gemini-3.8-flash",
+        model: GEMINI_TEXT_MODEL,
         contents: turns,
         config: {
           systemInstruction,
@@ -654,13 +724,14 @@ async function startServer() {
           for (const call of chunk.functionCalls) {
             if (call.name === "addExpense") {
               const args = call.args as { title?: string; amount?: number; category?: string };
-              if (args.title && args.amount) {
+              const cleanTitle = typeof args.title === "string" ? args.title.trim().slice(0, 80) : "";
+              if (cleanTitle && isValidExpenseAmount(args.amount)) {
                 toolAction = {
                   type: "ADD_EXPENSE",
                   payload: {
-                    title: args.title,
+                    title: cleanTitle,
                     amount: Number(args.amount),
-                    category: args.category || categorizeExpense(args.title),
+                    category: args.category || categorizeExpense(cleanTitle),
                   },
                 };
               }
@@ -672,7 +743,7 @@ async function startServer() {
               };
             } else if (call.name === "setDailyLimit") {
               const args = call.args as { limit?: number };
-              if (args.limit) {
+              if (isValidDailyLimit(args.limit)) {
                 toolAction = {
                   type: "SET_DAILY_LIMIT",
                   payload: { limit: Number(args.limit) },
@@ -684,13 +755,18 @@ async function startServer() {
                 amount?: number;
                 description?: string;
               };
-              if (args.friendName && args.amount) {
+              const cleanFriend =
+                typeof args.friendName === "string" ? args.friendName.trim().slice(0, 60) : "";
+              if (cleanFriend && isValidKhataAmount(args.amount)) {
                 toolAction = {
                   type: "ADD_KHATA",
                   payload: {
-                    friendName: args.friendName,
+                    friendName: cleanFriend,
                     amount: Number(args.amount),
-                    description: args.description || "Shared Expense",
+                    description:
+                      typeof args.description === "string" && args.description.trim()
+                        ? args.description.trim().slice(0, 100)
+                        : "Shared Expense",
                   },
                 };
               }
@@ -757,7 +833,9 @@ async function startServer() {
       history?: ClientChatMessage[];
     };
 
-    const userPrompt = (prompt || message || query || "Protocol Status, Sir").trim();
+    const userPrompt = String(prompt || message || query || "Protocol Status, Sir")
+      .trim()
+      .slice(0, 1000);
     const preDetectedAction = extractIntentAction(userPrompt);
 
     const ai = getGenAIClient();
@@ -781,7 +859,7 @@ async function startServer() {
       );
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
+        model: GEMINI_TEXT_MODEL,
         contents: turns,
         config: {
           systemInstruction,
@@ -795,13 +873,14 @@ async function startServer() {
         for (const call of response.functionCalls) {
           if (call.name === "addExpense") {
             const args = call.args as { title?: string; amount?: number; category?: string };
-            if (args.title && args.amount) {
+            const cleanTitle = typeof args.title === "string" ? args.title.trim().slice(0, 80) : "";
+            if (cleanTitle && isValidExpenseAmount(args.amount)) {
               toolAction = {
                 type: "ADD_EXPENSE",
                 payload: {
-                  title: args.title,
+                  title: cleanTitle,
                   amount: Number(args.amount),
-                  category: args.category || categorizeExpense(args.title),
+                  category: args.category || categorizeExpense(cleanTitle),
                 },
               };
             }
@@ -813,7 +892,7 @@ async function startServer() {
             };
           } else if (call.name === "setDailyLimit") {
             const args = call.args as { limit?: number };
-            if (args.limit) {
+            if (isValidDailyLimit(args.limit)) {
               toolAction = {
                 type: "SET_DAILY_LIMIT",
                 payload: { limit: Number(args.limit) },
@@ -825,13 +904,18 @@ async function startServer() {
               amount?: number;
               description?: string;
             };
-            if (args.friendName && args.amount) {
+            const cleanFriend =
+              typeof args.friendName === "string" ? args.friendName.trim().slice(0, 60) : "";
+            if (cleanFriend && isValidKhataAmount(args.amount)) {
               toolAction = {
                 type: "ADD_KHATA",
                 payload: {
-                  friendName: args.friendName,
+                  friendName: cleanFriend,
                   amount: Number(args.amount),
-                  description: args.description || "Shared Expense",
+                  description:
+                    typeof args.description === "string" && args.description.trim()
+                      ? args.description.trim().slice(0, 100)
+                      : "Shared Expense",
                 },
               };
             }
@@ -881,11 +965,11 @@ async function startServer() {
   app.post("/api/jarvis", handleJarvisAsk);
   app.post("/api/chat", handleJarvisAsk);
 
-  // Jarvis Text-to-Speech endpoint (Gemini 3.8 Flash Lite TTS)
+  // Jarvis Text-to-Speech endpoint
   app.post("/api/jarvis/tts", async (req: Request, res: Response) => {
     res.setHeader("Content-Type", "application/json");
     const { text } = req.body as { text?: string };
-    if (!text || !text.trim()) {
+    if (!text || typeof text !== "string" || !text.trim()) {
       res.status(400).json({ error: "Text is required for speech synthesis." });
       return;
     }
@@ -899,7 +983,7 @@ async function startServer() {
     try {
       const cleanText = text.replace(/[*#_`~]/g, "").slice(0, 500);
       const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash-lite-tts",
+        model: GEMINI_TTS_MODEL,
         contents: [
           {
             role: "user",
@@ -918,28 +1002,29 @@ async function startServer() {
 
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (!base64Audio) {
-        res.status(502).json({ error: "No audio payload returned from TTS model." });
+        res.status(502).json({ error: "Speech synthesis temporarily unavailable." });
         return;
       }
 
       res.status(200).json({ audioBase64: base64Audio, mimeType: "audio/wav" });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "TTS synthesis error.";
-      res.status(502).json({ error: message });
+    } catch {
+      res.status(502).json({ error: "Speech synthesis temporarily unavailable." });
     }
   });
 
-  // Receipt / Bill OCR Scanner Endpoint (Gemini 3.8 Flash Vision)
-  app.post("/api/ocr/receipt", async (req: Request, res: Response) => {
+  // Receipt / Bill OCR Scanner Endpoint (8MB scoped JSON body limit)
+  app.post("/api/ocr/receipt", ocrReceiptJsonParser, async (req: Request, res: Response) => {
     res.setHeader("Content-Type", "application/json");
-    const { imageBase64, mimeType, fileName } = req.body as {
+    const { imageBase64, mimeType } = req.body as {
       imageBase64?: string;
       mimeType?: string;
       fileName?: string;
     };
 
     if (!imageBase64) {
-      res.status(400).json({ error: "Receipt image data is required." });
+      res.status(400).json({
+        error: "Receipt scan unreadable or API key missing. Please enter manually.",
+      });
       return;
     }
 
@@ -948,23 +1033,15 @@ async function startServer() {
 
     const ai = getGenAIClient();
     if (!ai) {
-      const fallbackVendor = fileName
-        ? fileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ")
-        : "Third Wave Coffee";
-      res.status(200).json({
-        vendor: fallbackVendor.charAt(0).toUpperCase() + fallbackVendor.slice(1),
-        amount: 340,
-        category: categorizeExpense(fallbackVendor),
-        paymentMode: "UPI",
-        itemsSummary: "Extracted via Stark Local OCR Engine",
-        source: "fallback",
+      res.status(503).json({
+        error: "Receipt scan unreadable or API key missing. Please enter manually.",
       });
       return;
     }
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
+        model: GEMINI_TEXT_MODEL,
         contents: {
           parts: [
             {
@@ -975,8 +1052,8 @@ async function startServer() {
             },
             {
               text: `Analyze this receipt, bill, or payment screenshot. Extract:
-1. vendor: The merchant, restaurant, store, or recipient name (e.g. "Swiggy", "Starbucks", "Reliance Fresh", "Indian Oil").
-2. amount: The final total amount paid in numbers (INR). If multiple numbers exist, pick the Grand Total / Net Payable.
+1. vendor: The merchant, restaurant, store, or recipient name (e.g. "Swiggy", "Starbucks", "Reliance Fresh", "Indian Oil"). If unreadable, return empty string "".
+2. amount: The final total amount paid in numbers (INR). If multiple numbers exist, pick the Grand Total / Net Payable. If unreadable or no valid total exists, return 0.
 3. category: Must be exactly one of: "Food", "Chai & Snacks", "Transport", "Grocery", "Entertainment", "Bills", "Shopping".
 4. paymentMode: Must be exactly one of: "UPI", "Card", "Cash".
 5. itemsSummary: Brief 1-line summary of items on the bill.`,
@@ -1024,6 +1101,16 @@ async function startServer() {
         itemsSummary?: string;
       };
 
+      const cleanVendor = (parsed.vendor || "").trim();
+      const numericAmount = Math.round(Number(parsed.amount));
+
+      if (!cleanVendor || Number.isNaN(numericAmount) || numericAmount <= 0) {
+        res.status(422).json({
+          error: "Receipt scan unreadable or API key missing. Please enter manually.",
+        });
+        return;
+      }
+
       const validCategories = [
         "Food",
         "Chai & Snacks",
@@ -1035,7 +1122,7 @@ async function startServer() {
       ];
       const normalizedCategory = validCategories.includes(parsed.category || "")
         ? parsed.category!
-        : categorizeExpense(parsed.vendor || "");
+        : categorizeExpense(cleanVendor);
 
       const validModes = ["UPI", "Card", "Cash"];
       const normalizedMode = validModes.includes(parsed.paymentMode || "")
@@ -1043,21 +1130,16 @@ async function startServer() {
         : "UPI";
 
       res.status(200).json({
-        vendor: (parsed.vendor || "Scanned Receipt").trim(),
-        amount: Math.max(1, Math.round(Number(parsed.amount) || 250)),
+        vendor: cleanVendor,
+        amount: numericAmount,
         category: normalizedCategory,
         paymentMode: normalizedMode,
         itemsSummary: parsed.itemsSummary || "Scanned via Gemini Vision OCR",
         source: "gemini",
       });
     } catch {
-      res.status(200).json({
-        vendor: "Scanned Bill Receipt",
-        amount: 280,
-        category: "Food",
-        paymentMode: "UPI",
-        itemsSummary: "Extracted via fallback OCR",
-        source: "fallback",
+      res.status(422).json({
+        error: "Receipt scan unreadable or API key missing. Please enter manually.",
       });
     }
   });

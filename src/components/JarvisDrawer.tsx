@@ -487,21 +487,27 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
     payload: any;
   }) => {
     if (action.type === "ADD_EXPENSE") {
-      onAddExpense?.(
-        action.payload.title,
-        Number(action.payload.amount),
-        action.payload.category || "Food"
-      );
+      const amt = Number(action.payload?.amount);
+      const title = String(action.payload?.title || "").trim();
+      if (title && Number.isFinite(amt) && amt > 0 && amt <= 1000000) {
+        onAddExpense?.(title, amt, action.payload.category || "Food");
+      }
     } else if (action.type === "ADD_KHATA") {
-      onAddKhataEntry?.(
-        String(action.payload.friendName || "Friend"),
-        Number(action.payload.amount),
-        String(action.payload.description || "Shared Expense")
-      );
+      const amt = Number(action.payload?.amount);
+      if (Number.isFinite(amt) && amt !== 0 && Math.abs(amt) <= 1000000) {
+        onAddKhataEntry?.(
+          String(action.payload?.friendName || "Friend").trim(),
+          amt,
+          String(action.payload?.description || "Shared Expense").trim()
+        );
+      }
     } else if (action.type === "SET_LOCKDOWN") {
-      onToggleLockdown?.(Boolean(action.payload.active));
+      onToggleLockdown?.(Boolean(action.payload?.active));
     } else if (action.type === "SET_DAILY_LIMIT") {
-      onUpdateDailyLimit?.(Number(action.payload.limit));
+      const lim = Number(action.payload?.limit);
+      if (Number.isFinite(lim) && lim >= 50 && lim <= 1000000) {
+        onUpdateDailyLimit?.(lim);
+      }
     }
   };
 

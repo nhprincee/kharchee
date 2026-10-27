@@ -1,5 +1,5 @@
-import React from "react";
-import { Flame, Gift, Eye, EyeOff } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Flame, Gift, Eye, EyeOff, Download, Upload, Database } from "lucide-react";
 import { THEMES } from "./ThemeSelector";
 
 interface HeaderProps {
@@ -13,6 +13,8 @@ interface HeaderProps {
   onOpenThemes: () => void;
   onOpenStreakCelebration: () => void;
   onOpenRewardVault?: () => void;
+  onExportBackup?: () => void;
+  onImportBackup?: (file: File) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,17 +28,16 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenThemes,
   onOpenStreakCelebration,
   onOpenRewardVault,
+  onExportBackup,
+  onImportBackup,
 }) => {
+  const [showBackupMenu, setShowBackupMenu] = useState(false);
+  const backupFileInputRef = useRef<HTMLInputElement | null>(null);
+
   const activeTheme =
     THEMES.find(
       (t) => t.id === currentThemeId || t.appThemeId === currentThemeId
     ) || THEMES[0];
-
-  const getStreakTier = (days: number) => {
-    if (days >= 7) return "Stark Elite";
-    if (days >= 4) return "Iron Vault";
-    return "Novice Saver";
-  };
 
   return (
     <header
@@ -48,6 +49,22 @@ export const Header: React.FC<HeaderProps> = ({
       }}
       className="sticky top-0 z-50 w-full px-4 py-3 !bg-black !bg-none !shadow-none !backdrop-blur-none flex items-center justify-between"
     >
+      {/* Hidden File Input for Import / Restore Backup */}
+      <input
+        ref={backupFileInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && onImportBackup) {
+            onImportBackup(file);
+            setShowBackupMenu(false);
+          }
+          e.target.value = "";
+        }}
+        className="hidden"
+      />
+
       {/* Brand & Active Authentic Logo — 100% Flat Stealth Matte Black (Zero Glow) */}
       <div
         style={{ backgroundColor: "#000000", backgroundImage: "none", boxShadow: "none", filter: "none" }}
@@ -88,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Minimalist Monochrome & Subtle Champagne Controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 relative">
         {onToggleStealthMode && (
           <button
             type="button"
@@ -111,6 +128,58 @@ export const Header: React.FC<HeaderProps> = ({
               <Eye className="w-3.5 h-3.5 text-white/80" />
             )}
           </button>
+        )}
+
+        {/* Header 1-Tap Backup & Restore Popover Trigger */}
+        {(onExportBackup || onImportBackup) && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowBackupMenu((v) => !v)}
+              title="LocalStorage Backup: Export / Import JSON"
+              aria-label="Backup and Restore Data"
+              className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors cursor-pointer ${
+                showBackupMenu
+                  ? "bg-white/[0.12] border-white/25 text-[#e6c875]"
+                  : "bg-white/[0.04] border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white"
+              }`}
+            >
+              <Database className="w-3.5 h-3.5" />
+            </button>
+
+            {showBackupMenu && (
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#080d16] border border-white/15 p-2 shadow-[0_12px_35px_rgba(0,0,0,0.95)] z-50 space-y-1.5">
+                <div className="px-2 py-1 border-b border-white/10">
+                  <span className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-[#e6c875] block">
+                    DATA SAFEGUARD VAULT
+                  </span>
+                </div>
+                {onExportBackup && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onExportBackup();
+                      setShowBackupMenu(false);
+                    }}
+                    className="w-full px-2.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 text-left text-[11px] font-bold text-white flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Export Backup (JSON)</span>
+                  </button>
+                )}
+                {onImportBackup && (
+                  <button
+                    type="button"
+                    onClick={() => backupFileInputRef.current?.click()}
+                    className="w-full px-2.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 text-left text-[11px] font-bold text-slate-200 flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>Import / Restore Backup</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {onOpenRewardVault && (
@@ -154,4 +223,5 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+
 
