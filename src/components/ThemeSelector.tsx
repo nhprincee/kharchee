@@ -162,28 +162,19 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
             key={theme.id}
             type="button"
             onClick={() => onSelectTheme(theme.appThemeId)}
-            style={{
-              borderColor: isActive
-                ? theme.primaryColor
-                : "rgba(255, 255, 255, 0.08)",
-              boxShadow: isActive ? `0 0 20px ${theme.accentGlow}` : "none",
-            }}
-            className={`relative flex flex-col items-start p-3.5 rounded-2xl border text-left transition-all duration-300 backdrop-blur-md cursor-pointer active:scale-[0.98] ${
+            className={`relative flex flex-col items-start p-3.5 rounded-2xl border text-left transition-all duration-300 cursor-pointer active:scale-[0.98] bg-[#0a0e17] ${
               isActive
-                ? "bg-[#0f172a]/90"
-                : "bg-[#090d16]/60 hover:bg-[#0f172a]/40"
+                ? "border-amber-400/50 shadow-[0_8px_24px_rgba(0,0,0,0.85)]"
+                : "border-white/5 hover:border-amber-400/30"
             }`}
           >
             {isActive && (
-              <span
-                style={{ backgroundColor: theme.primaryColor }}
-                className="absolute top-3 right-3 flex items-center gap-1 text-[10px] font-black tracking-wider text-black px-2 py-0.5 rounded-full"
-              >
+              <span className="absolute top-3 right-3 flex items-center gap-1 text-[10px] font-black tracking-wider bg-[#e6c875] text-black px-2 py-0.5 rounded-full">
                 <Check className="w-3 h-3 stroke-[3]" /> ACTIVE
               </span>
             )}
 
-            <div className="p-2 rounded-xl bg-black/40 border border-white/5 mb-2.5">
+            <div className="p-2 rounded-xl bg-[#090d15] border border-white/5 mb-2.5">
               {theme.badgeSvg}
             </div>
 

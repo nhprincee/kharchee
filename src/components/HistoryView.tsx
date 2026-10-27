@@ -233,7 +233,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       {/* Quick Info & Format Indicator */}
       {isFiltered && expenses.length > filteredExpenses.length && (
-        <div className="flex items-center justify-between p-2.5 rounded-xl border border-white/10 bg-slate-900/60 text-[11px] text-slate-300">
+        <div className="flex items-center justify-between p-2.5 rounded-xl border border-white/10 bg-[#0a0e17] text-[11px] text-slate-300 shadow-[0_4px_14px_rgba(0,0,0,0.5)]">
           <div className="flex items-center gap-1.5">
             <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span>
@@ -261,7 +261,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           style={{
             borderColor: query ? theme.accentHex : undefined,
           }}
-          className="w-full h-10 pl-9 pr-3 rounded-2xl bg-slate-900/90 border border-white/10 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors"
+          className="w-full h-10 pl-9 pr-3 rounded-2xl bg-[#0a0e17] border border-white/10 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors shadow-[0_4px_14px_rgba(0,0,0,0.5)]"
         />
       </div>
 
@@ -282,7 +282,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             className={`px-3 py-1 rounded-xl text-[11px] font-semibold whitespace-nowrap shrink-0 transition-all cursor-pointer ${
               selectedCategory === cat
                 ? `${theme.buttonBg} ${theme.buttonText}`
-                : "bg-slate-900/90 border border-white/10 text-slate-400 hover:text-slate-200"
+                : "bg-[#0a0e17] border border-white/10 text-slate-400 hover:text-slate-200"
             }`}
           >
             {cat}
@@ -291,7 +291,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       </div>
 
       {/* Payment Mode Segmented Control */}
-      <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900/90 border border-white/10">
+      <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0a0e17] border border-white/10 shadow-[0_4px_14px_rgba(0,0,0,0.5)]">
         {MODE_FILTERS.map((mode) => (
           <button
             key={mode}
@@ -299,7 +299,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             onClick={() => setSelectedMode(mode)}
             className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
               selectedMode === mode
-                ? "bg-slate-800 text-white shadow-xs"
+                ? "bg-[#05070c] border border-white/10 text-white shadow-xs"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -310,7 +310,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       {/* Timeline Groups */}
       {groupedByDate.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-8 text-center backdrop-blur-sm">
+        <div className="rounded-2xl border border-white/10 bg-[#0a0e17] p-8 text-center backdrop-blur-sm shadow-[0_6px_20px_rgba(0,0,0,0.6),0_0_16px_rgba(6,182,212,0.06)]">
           <ReceiptText className="w-8 h-8 text-slate-500 mx-auto mb-2" />
           <p className="text-xs font-semibold text-slate-300">No matching expenses</p>
           <div className="flex items-center justify-center gap-2 mt-3">
@@ -328,7 +328,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleExportCsv(true)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 border border-white/10 text-slate-200 hover:text-white cursor-pointer"
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#05070c] border border-white/10 text-slate-200 hover:text-white cursor-pointer"
               >
                 Export All ({expenses.length})
               </button>

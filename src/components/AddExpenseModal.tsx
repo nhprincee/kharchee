@@ -25,6 +25,7 @@ import {
   celebrateDisciplineShield,
   playMidnightCravingsChime,
   playProVaultChime,
+  playMechanicalKeyTick,
 } from "../utils/celebration";
 
 interface AddExpenseModalProps {
@@ -1264,6 +1265,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                   placeholder="150"
                   value={amount}
                   onChange={(e) => {
+                    playMechanicalKeyTick();
                     setAmount(e.target.value);
                     setError("");
                   }}

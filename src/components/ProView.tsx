@@ -10,7 +10,6 @@ import {
   Flame,
   Sparkles,
   FileDown,
-  Send,
   QrCode,
   Zap,
   Sliders,
@@ -18,6 +17,9 @@ import {
   Cpu,
   Lock,
   X,
+  Bot,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { Expense, FanTheme, KhataFriend, ThemeId } from "../types";
@@ -93,10 +95,11 @@ export const ProView: React.FC<ProViewProps> = ({
     return saved !== null ? saved === "true" : true;
   });
 
-  const [autoCollectorArmed, setAutoCollectorArmed] = useState<boolean>(() => {
-    const saved = localStorage.getItem("kharche_autocollector_v1");
-    return saved !== null ? saved === "true" : true;
+  // Autonomous Auto-Pilot Recovery Agent State (1-Time Initial Permission)
+  const [autoPilotRecoveryEnabled, setAutoPilotRecoveryEnabled] = useState<boolean>(() => {
+    return localStorage.getItem("autoPilotRecoveryEnabled") === "true";
   });
+  const [showAutoPilotConsentModal, setShowAutoPilotConsentModal] = useState<boolean>(false);
 
   const [selectedDebtFriend, setSelectedDebtFriend] = useState<{
     friend: KhataFriend;
@@ -120,12 +123,21 @@ export const ProView: React.FC<ProViewProps> = ({
   const [showAuditPreview, setShowAuditPreview] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
 
-  // PRO Subscription Pricing Tier State (79 Monthly vs 213 3-Month Vault Pass)
+  // Truecaller-Style Gold / Platinum Elite Carousel & Checkout Drawer State
   const [selectedPlan, setSelectedPlan] = useState<"monthly" | "quarterly">("quarterly");
-  const [showUpiQrModal, setShowUpiQrModal] = useState(false);
+  const [isCheckoutDrawerOpen, setIsCheckoutDrawerOpen] = useState(false);
 
-  const selectedPlanAmount = selectedPlan === "monthly" ? 79 : 213;
-  const proUpiDeepLink = `upi://pay?pa=mrigander@upi&pn=Mrigander&am=${selectedPlanAmount}&tn=KharcheProVault`;
+  const selectedPlanAmount = selectedPlan === "monthly" ? 39 : 99;
+  const selectedPlanTitle =
+    selectedPlan === "monthly" ? "PRO GOLD EDITION" : "PRO PLATINUM ELITE";
+  const selectedPlanCtaLabel =
+    selectedPlan === "quarterly"
+      ? "START 3-MONTH ELITE PASS (₹99)"
+      : "START MONTHLY GOLD PASS (₹39)";
+  const proUpiDeepLink = `upi://pay?pa=mrigander@upi&pn=Mrigander&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
+  const gpayDeepLink = `tez://upi/pay?pa=mrigander@upi&pn=Mrigander&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
+  const phonePeDeepLink = `phonepe://pay?pa=mrigander@upi&pn=Mrigander&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
+  const paytmDeepLink = `paytmmp://pay?pa=mrigander@upi&pn=Mrigander&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
 
   // Device orientation listener for subtle mobile 3D card tilt
   useEffect(() => {
@@ -198,8 +210,26 @@ export const ProView: React.FC<ProViewProps> = ({
 
     if (list.length > 0) return list;
 
-    // Fallback sample if all settled
+    // Fallback sample if all settled (Rohan ₹300, Kabir ₹420)
     return [
+      {
+        friend: {
+          id: "sample-rohan",
+          name: "Rohan",
+          phone: "919811122233",
+          avatarInitials: "RH",
+          entries: [
+            {
+              id: "e0",
+              description: "Midnight Biryani & Cold Drink",
+              amount: 300,
+              timestamp: new Date().toISOString(),
+              settled: false,
+            },
+          ],
+        },
+        net: 300,
+      },
       {
         friend: {
           id: "sample-kabir",
@@ -264,16 +294,32 @@ export const ProView: React.FC<ProViewProps> = ({
     );
   };
 
-  const handleToggleAutoCollector = () => {
+  const handleToggleAutoPilotRecovery = () => {
     playProVaultChime();
-    const next = !autoCollectorArmed;
-    setAutoCollectorArmed(next);
-    localStorage.setItem("kharche_autocollector_v1", String(next));
-    onShowToast?.(
-      next
-        ? "⚡ WhatsApp Khata Auto-Collector ARMED"
-        : "WhatsApp Auto-Collector Paused"
-    );
+    if (autoPilotRecoveryEnabled) {
+      setAutoPilotRecoveryEnabled(false);
+      localStorage.setItem("autoPilotRecoveryEnabled", "false");
+      onShowToast?.("Auto-Pilot Recovery Agent Paused");
+    } else {
+      const consentGranted =
+        localStorage.getItem("autoPilotRecoveryConsentGranted") === "true";
+      if (!consentGranted) {
+        setShowAutoPilotConsentModal(true);
+      } else {
+        setAutoPilotRecoveryEnabled(true);
+        localStorage.setItem("autoPilotRecoveryEnabled", "true");
+        onShowToast?.("⚡ Auto-Pilot Active · Next Sweep at 10:00 PM");
+      }
+    }
+  };
+
+  const handleAuthorizeAutoPilotConsent = () => {
+    playProVaultChime();
+    localStorage.setItem("autoPilotRecoveryConsentGranted", "true");
+    localStorage.setItem("autoPilotRecoveryEnabled", "true");
+    setAutoPilotRecoveryEnabled(true);
+    setShowAutoPilotConsentModal(false);
+    onShowToast?.("⚡ J.A.R.V.I.S. Auto-Recovery Authorized · Next Sweep at 10:00 PM");
   };
 
   const handleTriggerSavageVoiceSample = () => {
@@ -416,24 +462,20 @@ export const ProView: React.FC<ProViewProps> = ({
     onShowToast?.("📄 Executive Stark Monthly Audit Exported");
   };
 
-  const handleClaimVault = (planOverride?: "monthly" | "quarterly") => {
+  const handleOpenCheckoutDrawer = (planOverride?: "monthly" | "quarterly") => {
     playProVaultChime();
     const activePlan = planOverride || selectedPlan;
-    const amt = activePlan === "monthly" ? 79 : 213;
-    const deepLink = `upi://pay?pa=mrigander@upi&pn=Mrigander&am=${amt}&tn=KharcheProVault`;
     setSelectedPlan(activePlan);
-    setShowUpiQrModal(true);
-    if (!isProActive) {
-      fireConfettiBurst("#fbbf24");
-      onTogglePro();
-    }
-    onShowToast?.(
-      `⚡ Launching UPI (₹${amt}) · Scan dynamic QR or tap UPI app`
-    );
+    setIsCheckoutDrawerOpen(true);
+  };
+
+  const handleLaunchUpiApp = (deepLinkUrl: string, appLabel: string) => {
+    playProVaultChime();
+    onShowToast?.(`⚡ Opening ${appLabel} (₹${selectedPlanAmount} → mrigander@upi)`);
     try {
-      window.location.href = deepLink;
+      window.location.href = deepLinkUrl;
     } catch {
-      // QR modal stays open for instant scan
+      // QR code remains visible in drawer
     }
   };
 
@@ -587,26 +629,26 @@ export const ProView: React.FC<ProViewProps> = ({
       </div>
 
       {/* =====================================================================
-          2. CRED-STYLE LUXURY ACTION DOCK · UPDATED PRO PRICING & 10% DISCOUNT TIER
+          2. TRUECALLER-STYLE GOLD / PLATINUM ELITE CAROUSEL & FEATURE SWIPE BULLETS
          ===================================================================== */}
-      <section className="rounded-3xl border border-amber-400/35 bg-[#0b0f17] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.85)] space-y-3.5">
-        <div className="flex items-center justify-between">
+      <section className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 shadow-[0_16px_40px_rgba(0,0,0,0.95),0_0_24px_rgba(251,191,36,0.12)] space-y-4 overflow-hidden">
+        <div className="flex items-center justify-between gap-2">
           <div>
-            <span className="block text-[10px] font-mono font-black uppercase tracking-[0.2em] bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 bg-clip-text text-transparent">
-              SOVEREIGN ACCESS TIER
+            <span className="block text-[10px] font-mono font-black uppercase tracking-[0.22em] bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent">
+              TRUECALLER-STYLE SOVEREIGN TIERS
             </span>
-            <h3 className="text-sm font-black tracking-tight mt-0.5 bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 bg-clip-text text-transparent">
-              KHARCHE PRO · Black Edition Vault
+            <h3 className="text-base font-black tracking-tight mt-0.5 bg-gradient-to-r from-amber-300 via-yellow-200 to-yellow-500 bg-clip-text text-transparent">
+              Gold &amp; Platinum Elite Membership
             </h3>
           </div>
-          <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-[9px] font-mono font-black uppercase tracking-wider text-amber-300">
-            INSTANT UPI UNLOCK
+          <span className="text-[10px] font-mono font-bold text-amber-300 whitespace-nowrap">
+            Swipe Cards →
           </span>
         </div>
 
-        {/* Dual Tier Selector Cards: Monthly Pass (₹79) vs 3-Month Vault Pass (₹213 - Save 10%) */}
-        <div className="grid grid-cols-2 gap-2.5 pt-0.5">
-          {/* Monthly Pass: ₹79 / month (strikethrough ₹199) */}
+        {/* Truecaller Gold / Platinum Swipeable Card Carousel */}
+        <div className="flex gap-3.5 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none -mx-1 px-1">
+          {/* Card 1: "PRO GOLD EDITION" (₹39/mo, strikethrough ₹99) with metallic gold sheen and shield insignia */}
           <div
             onClick={() => {
               playProVaultChime();
@@ -617,41 +659,65 @@ export const ProView: React.FC<ProViewProps> = ({
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") setSelectedPlan("monthly");
             }}
-            className={`relative rounded-2xl p-3 border text-left transition-all cursor-pointer flex flex-col justify-between ${
+            className={`snap-center shrink-0 w-[262px] rounded-2xl p-4 border text-left transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden ${
               selectedPlan === "monthly"
-                ? "bg-[#121826] border-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.28)]"
-                : "bg-[#070a10] border-white/10 hover:border-white/25"
+                ? "bg-gradient-to-br from-[#332407] via-[#1c1406] to-[#0a0e17] border-2 border-amber-400 shadow-[0_0_28px_rgba(251,191,36,0.45),inset_0_1px_1px_rgba(254,243,199,0.35)] scale-[1.01]"
+                : "bg-gradient-to-br from-[#1f1606]/90 via-[#120d05]/90 to-[#0a0e17] border-amber-500/30 hover:border-amber-400/60 opacity-90"
             }`}
           >
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-black uppercase tracking-wider text-slate-300">
-                  MONTHLY PASS
+            {/* Metallic Gold Sheen Overlay */}
+            <div
+              className="pointer-events-none absolute inset-0 opacity-25"
+              style={{
+                background:
+                  "linear-gradient(125deg, rgba(251,191,36,0.28) 0%, transparent 45%, rgba(245,158,11,0.18) 100%)",
+              }}
+            />
+
+            <div className="relative z-10 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950 font-mono text-[9px] font-black uppercase tracking-widest shadow-[0_0_12px_rgba(251,191,36,0.6)]">
+                  <Shield className="w-3 h-3 fill-slate-950 text-slate-950" />
+                  <span>GOLD SHIELD</span>
                 </span>
                 <span
-                  className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                  className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
                     selectedPlan === "monthly"
-                      ? "border-amber-400 bg-amber-400 text-slate-950"
-                      : "border-slate-600"
+                      ? "border-amber-300 bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950"
+                      : "border-amber-400/40"
                   }`}
                 >
-                  {selectedPlan === "monthly" && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                  {selectedPlan === "monthly" && <Check className="w-3 h-3 stroke-[3]" />}
                 </span>
               </div>
 
-              <div className="mt-2 flex items-baseline gap-1.5">
-                <span className="font-mono text-xl font-black text-white">₹79</span>
-                <span className="font-mono text-xs text-slate-500 line-through">₹199</span>
-                <span className="text-[10px] font-mono text-slate-400">/ month</span>
+              <div className="flex items-center gap-1.5">
+                <Crown className="w-4 h-4 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)] shrink-0" />
+                <h4 className="text-sm font-black bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent tracking-wider uppercase">
+                  PRO GOLD EDITION
+                </h4>
+              </div>
+
+              <div className="flex items-baseline gap-1.5 pt-0.5">
+                <span className="font-mono text-2xl font-black text-amber-300 tabular-nums">
+                  ₹39
+                </span>
+                <span className="font-mono text-xs text-amber-200/50 line-through tabular-nums">
+                  ₹99
+                </span>
+                <span className="text-[11px] font-mono text-amber-100/80">/ month</span>
               </div>
             </div>
 
-            <p className="text-[10px] font-mono text-slate-400 mt-2">
-              Standard Monthly Access · Cancel anytime
-            </p>
+            <div className="relative z-10 pt-3 mt-3 border-t border-amber-400/20 flex items-center justify-between text-[10px] font-mono text-amber-200/90">
+              <span>Metallic Gold Shield</span>
+              <span className="font-black text-amber-300">
+                {selectedPlan === "monthly" ? "Selected ✓" : "Tap to Select →"}
+              </span>
+            </div>
           </div>
 
-          {/* 3-Month Vault Pass: ₹213 for 3 Months (10% Flat Discount from ₹237, ₹71/mo) */}
+          {/* Card 2: "PRO PLATINUM ELITE" (₹99 / 3 Months - Strikethrough ₹117, Save 15%) with electric blue-gold iridescent finish */}
           <div
             onClick={() => {
               playProVaultChime();
@@ -662,148 +728,106 @@ export const ProView: React.FC<ProViewProps> = ({
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") setSelectedPlan("quarterly");
             }}
-            className={`relative rounded-2xl p-3 border text-left transition-all cursor-pointer flex flex-col justify-between ${
+            className={`snap-center shrink-0 w-[276px] rounded-2xl p-4 border text-left transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden ${
               selectedPlan === "quarterly"
-                ? "bg-gradient-to-br from-[#19150d] via-[#101522] to-[#080c14] border-2 border-amber-400 shadow-[0_0_28px_rgba(251,191,36,0.4)]"
-                : "bg-[#070a10] border-amber-500/30 hover:border-amber-400/60"
+                ? "bg-gradient-to-br from-[#0c273d] via-[#131830] to-[#261b08] border-2 border-amber-400 shadow-[0_0_32px_rgba(251,191,36,0.45),0_0_20px_rgba(6,182,212,0.35),inset_0_1px_1px_rgba(255,255,255,0.3)] scale-[1.01]"
+                : "bg-gradient-to-br from-[#0a1c2e]/90 via-[#0e1326]/90 to-[#1c1407]/90 border-cyan-400/35 hover:border-amber-300/70 opacity-90"
             }`}
           >
-            {/* Glowing "MOST POPULAR - SAVE 10%" Badge */}
-            <div className="-mt-5 mb-1.5 flex justify-end">
-              <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 font-mono text-[8px] font-black uppercase tracking-wider shadow-[0_0_15px_rgba(251,191,36,0.85)] animate-pulse">
-                MOST POPULAR - SAVE 10%
-              </span>
-            </div>
+            {/* Electric Blue-Gold Iridescent Foil Finish */}
+            <div
+              className="pointer-events-none absolute inset-0 opacity-30"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(6,182,212,0.35) 0%, rgba(59,130,246,0.18) 48%, rgba(251,191,36,0.35) 100%)",
+              }}
+            />
 
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-black uppercase tracking-wider text-amber-300">
-                  3-MONTH VAULT PASS
+            <div className="relative z-10 space-y-2.5">
+              <div className="flex items-center justify-between gap-1.5">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950 font-mono text-[9px] font-black uppercase tracking-widest shadow-[0_0_14px_rgba(251,191,36,0.75)]">
+                  <Sparkles className="w-3 h-3 fill-slate-950 text-slate-950" />
+                  <span>SAVE 15% · 3-MONTH ELITE</span>
                 </span>
                 <span
-                  className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                  className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
                     selectedPlan === "quarterly"
-                      ? "border-amber-400 bg-amber-400 text-slate-950"
-                      : "border-slate-600"
+                      ? "border-amber-300 bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950"
+                      : "border-cyan-400/40"
                   }`}
                 >
-                  {selectedPlan === "quarterly" && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                  {selectedPlan === "quarterly" && <Check className="w-3 h-3 stroke-[3]" />}
                 </span>
               </div>
 
-              <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
-                <span className="font-mono text-xl font-black bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 bg-clip-text text-transparent">
-                  ₹213
+              <div className="flex items-center gap-1.5">
+                <Shield className="w-4 h-4 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.85)] shrink-0" />
+                <h4 className="text-sm font-black bg-gradient-to-r from-amber-300 via-yellow-200 to-cyan-200 bg-clip-text text-transparent tracking-wider uppercase">
+                  PRO PLATINUM ELITE
+                </h4>
+              </div>
+
+              <div className="flex items-baseline gap-1.5 pt-0.5 flex-wrap">
+                <span className="font-mono text-2xl font-black text-white drop-shadow-[0_0_10px_rgba(251,191,36,0.5)] tabular-nums">
+                  ₹99
                 </span>
-                <span className="font-mono text-xs text-slate-500 line-through">₹237</span>
-                <span className="text-[10px] font-mono text-amber-200/90 font-bold">
-                  / 3 Months
+                <span className="font-mono text-xs text-slate-400 line-through tabular-nums">
+                  ₹117
+                </span>
+                <span className="text-[10px] font-mono text-amber-300 font-bold">
+                  / 3 Months (Save 15%)
                 </span>
               </div>
             </div>
 
-            <p className="text-[10px] font-mono text-emerald-300 font-bold mt-2">
-              ₹71/mo · 10% Flat Discount
-            </p>
+            <div className="relative z-10 pt-3 mt-3 border-t border-cyan-400/25 flex items-center justify-between text-[10px] font-mono text-cyan-100">
+              <span>3-Month Elite Vault (₹33/mo)</span>
+              <span className="font-black text-amber-300">
+                {selectedPlan === "quarterly" ? "Active Choice ★" : "Select Elite →"}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Subscribe & Launch Direct UPI Deep-Link + Dynamic Payment QR Button */}
-        <div className="flex items-center gap-2">
-          <a
-            href={proUpiDeepLink}
-            onClick={(e) => {
-              e.preventDefault();
-              handleClaimVault(selectedPlan);
-            }}
-            className="flex-1 min-h-[48px] rounded-2xl text-xs uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-black font-black tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.45)] border border-amber-300/60 hover:brightness-110"
-          >
-            <Crown className="w-4 h-4 fill-current text-black" />
-            <span>
-              SUBSCRIBE NOW · ₹{selectedPlanAmount}{" "}
-              {selectedPlan === "monthly" ? "/ MO" : "(3 MONTHS)"}
+        {/* Horizontal Feature Swipe Bullets */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between px-0.5">
+            <span className="text-[10px] font-mono font-black uppercase tracking-[0.18em] text-slate-400">
+              ELITE VAULT PRIVILEGES
             </span>
-          </a>
-
-          <button
-            type="button"
-            onClick={() => {
-              playProVaultChime();
-              setShowUpiQrModal((v) => !v);
-            }}
-            title="Show Instant Dynamic UPI Payment QR"
-            className="h-[48px] px-3.5 rounded-2xl bg-[#121826] border border-amber-400/50 text-amber-300 hover:text-amber-200 font-mono text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all shrink-0"
-          >
-            <QrCode className="w-4 h-4 text-amber-400" />
-            <span>{showUpiQrModal ? "Hide QR" : "UPI QR"}</span>
-          </button>
+            <span className="text-[9px] font-mono text-cyan-300/80">Swipe Perks →</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory scrollbar-none -mx-1 px-1">
+            {[
+              "🛡️ Auto-Pilot WhatsApp Debt Recovery",
+              "⚡ Uncensored Savage JARVIS Roasts",
+              "🎨 Unlimited Armor & Theme Forging Studio",
+              "📊 Stark Industries Monthly Financial Audit",
+            ].map((bullet) => (
+              <div
+                key={bullet}
+                className="snap-start shrink-0 px-3 py-2 rounded-xl bg-[#05070c] border border-white/10 shadow-[0_4px_14px_rgba(0,0,0,0.6),0_0_12px_rgba(251,191,36,0.12)] flex items-center gap-2 text-xs font-bold text-slate-100 whitespace-nowrap"
+              >
+                <span>{bullet}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Instant Dynamic UPI Payment QR Panel */}
-        {showUpiQrModal && (
-          <div className="p-4 rounded-2xl bg-[#05080f] border-2 border-amber-400/60 shadow-[0_0_30px_rgba(251,191,36,0.25)] space-y-3 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-[9px] font-mono font-black uppercase tracking-[0.2em] text-amber-300 block">
-                  INSTANT DYNAMIC PAYMENT QR
-                </span>
-                <p className="text-xs font-black text-white mt-0.5">
-                  {selectedPlan === "monthly"
-                    ? "Monthly Pass · ₹79 / month"
-                    : "3-Month Vault Pass · ₹213 (Save 10%)"}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowUpiQrModal(false)}
-                className="w-7 h-7 rounded-full bg-slate-900 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="flex flex-col items-center justify-center py-2">
-              <div className="p-3 rounded-2xl bg-white shadow-[0_0_25px_rgba(251,191,36,0.45)] border-2 border-amber-400">
-                <QRCodeSVG
-                  value={proUpiDeepLink}
-                  size={156}
-                  bgColor="#ffffff"
-                  fgColor="#020617"
-                  level="M"
-                />
-              </div>
-              <p className="text-[10px] font-mono text-amber-200 mt-2 break-all text-center">
-                {proUpiDeepLink}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <a
-                href={proUpiDeepLink}
-                className="h-9 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md"
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>Open UPI App (₹{selectedPlanAmount})</span>
-              </a>
-              <button
-                type="button"
-                onClick={() => {
-                  playProVaultChime();
-                  if (!isProActive) {
-                    fireConfettiBurst("#fbbf24");
-                    onTogglePro();
-                  }
-                  setShowUpiQrModal(false);
-                  onShowToast?.("👑 KHARCHE PRO Vault Activated!");
-                }}
-                className="h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>I&apos;ve Paid · Activate</span>
-              </button>
-            </div>
-          </div>
-        )}
+        {/* High-Gloss Inline Trigger Button */}
+        <button
+          type="button"
+          onClick={() => handleOpenCheckoutDrawer(selectedPlan)}
+          className="relative overflow-hidden w-full min-h-[48px] rounded-2xl text-xs uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950 font-black tracking-wider shadow-[0_0_28px_rgba(251,191,36,0.55)] hover:brightness-110 group"
+        >
+          {/* High-gloss sliding reflection sheen */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent skew-x-[-25deg] animate-[pulse_2.2s_ease-in-out_infinite] group-hover:translate-x-[320%] transition-transform duration-1000"
+          />
+          <Crown className="w-4 h-4 fill-current text-slate-950 relative z-10 shrink-0" />
+          <span className="relative z-10">{selectedPlanCtaLabel}</span>
+        </button>
       </section>
 
       {/* =====================================================================
@@ -811,7 +835,7 @@ export const ProView: React.FC<ProViewProps> = ({
          ===================================================================== */}
       <div className="space-y-3.5">
         <div className="px-1 flex items-center justify-between">
-          <span className="text-[11px] font-black uppercase tracking-[0.2em] bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 bg-clip-text text-transparent font-mono">
+          <span className="text-[11px] font-black uppercase tracking-[0.2em] bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent font-mono">
             PRO-EXCLUSIVE FEATURE SUITE
           </span>
           <span className="text-[10px] font-mono text-slate-400">4 Modules Online</span>
@@ -819,8 +843,7 @@ export const ProView: React.FC<ProViewProps> = ({
 
         {/* FEATURE 1: SAVAGE JARVIS UNCAPPED MODE */}
         <section
-          style={{ borderColor: `${theme.accentHex}35` }}
-          className="rounded-3xl border bg-[#0d121d] p-4 space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6)]"
+          className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(6,182,212,0.08)]"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5">
@@ -832,8 +855,8 @@ export const ProView: React.FC<ProViewProps> = ({
                   <h4 className="text-xs font-black text-white uppercase tracking-wider">
                     Savage JARVIS Uncapped Mode
                   </h4>
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-400/30">
-                    PRO
+                  <span className="text-[9px] font-mono font-bold text-orange-300">
+                    · PRO
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
@@ -878,27 +901,28 @@ export const ProView: React.FC<ProViewProps> = ({
           )}
         </section>
 
-        {/* FEATURE 2: WHATSAPP KHATA AUTO-COLLECTOR */}
+        {/* FEATURE 2: AUTONOMOUS AUTO-PILOT RECOVERY AGENT (1-TIME INITIAL PERMISSION) */}
         <section
-          style={{ borderColor: `${theme.accentHex}35` }}
-          className="rounded-3xl border bg-[#0d121d] p-4 space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6)]"
+          className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(6,182,212,0.08)]"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5">
               <div className="w-9 h-9 rounded-2xl bg-cyan-500/15 border border-cyan-400/40 flex items-center justify-center shrink-0">
-                <QrCode className="w-4 h-4 text-cyan-300" />
+                <Bot className="w-4 h-4 text-cyan-300" />
               </div>
               <div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h4 className="text-xs font-black text-white uppercase tracking-wider">
-                    WhatsApp Khata Auto-Collector
+                    Auto-Pilot Recovery Agent
                   </h4>
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
-                    1-TAP RECOVERY
-                  </span>
+                  {autoPilotRecoveryEnabled && (
+                    <span className="text-[10px] font-mono font-bold text-emerald-300">
+                      ⚡ Auto-Pilot Active · Next Sweep at 10:00 PM
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                  Generates dynamic Stark-styled overdue debt cards and direct UPI payment intents with 1 tap.
+                  Autonomous J.A.R.V.I.S. agent monitors overdue balances and auto-drafts WhatsApp debt alerts without manual clicks.
                 </p>
               </div>
             </div>
@@ -906,83 +930,74 @@ export const ProView: React.FC<ProViewProps> = ({
             <button
               type="button"
               role="switch"
-              aria-checked={autoCollectorArmed}
-              onClick={handleToggleAutoCollector}
+              aria-checked={autoPilotRecoveryEnabled}
+              onClick={handleToggleAutoPilotRecovery}
               className={`w-12 h-6.5 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                autoCollectorArmed
+                autoPilotRecoveryEnabled
                   ? "bg-gradient-to-r from-cyan-400 to-emerald-400"
-                  : "bg-slate-800 border border-white/10"
+                  : "bg-[#05070c] border border-white/10"
               }`}
             >
               <span
                 className={`block w-5.5 h-5.5 rounded-full bg-slate-950 transition-transform shadow-md ${
-                  autoCollectorArmed ? "translate-x-5.5" : "translate-x-0"
+                  autoPilotRecoveryEnabled ? "translate-x-5.5" : "translate-x-0"
                 }`}
               />
             </button>
           </div>
 
-          <div className="space-y-2 pt-1">
-            {debtors.map(({ friend, net }) => {
-              const upiUri = `upi://pay?pa=${encodeURIComponent(
-                myUpiId
-              )}&pn=Mrigander%20Singh&am=${net}&cu=INR&tn=${encodeURIComponent(
-                "Khata Settlement"
-              )}`;
-              const waText = `⚡ *STARK KHATA AUTO-COLLECTOR* ⚡\nHey ${friend.name}, ₹${net} is pending in our Khata ledger.\n\nSettle 1-tap via UPI: ${upiUri}\nUPI ID: *${myUpiId}*`;
-              const waUrl = `https://wa.me/${friend.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
-                waText
-              )}`;
+          {/* Live Status Bar */}
+          <div className="px-3 py-2 rounded-2xl bg-[#05070c] border border-cyan-500/30 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-mono font-bold text-cyan-300 flex items-center gap-1.5">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  autoPilotRecoveryEnabled ? "bg-emerald-400 animate-ping" : "bg-slate-600"
+                }`}
+              />
+              <span>
+                {autoPilotRecoveryEnabled
+                  ? "⚡ Auto-Pilot Active · Next Sweep at 10:00 PM"
+                  : "Standby · Toggle ON for 1-time autonomous recovery authorization"}
+              </span>
+            </span>
+          </div>
 
-              return (
-                <div
-                  key={friend.id}
-                  className="p-2.5 rounded-2xl bg-slate-950/80 border border-white/10 flex items-center justify-between gap-2"
-                >
-                  <div>
-                    <p className="text-xs font-bold text-white">
-                      {friend.name}{" "}
-                      <span className="font-mono text-emerald-400 font-black">
-                        +₹{net.toLocaleString("en-IN")}
-                      </span>
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-mono">
-                      UPI: {myUpiId}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playProVaultChime();
-                        setSelectedDebtFriend({ friend, amount: net });
-                      }}
-                      className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/40 text-[10px] font-black text-cyan-300 cursor-pointer active:scale-95 transition-all"
-                    >
-                      Debt Card
-                    </button>
-                    <a
-                      href={waUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => playProVaultChime()}
-                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500 text-slate-950 text-[10px] font-black flex items-center gap-1 hover:bg-emerald-400 active:scale-95 transition-all"
-                    >
-                      <Send className="w-3 h-3" />
-                      <span>Collect</span>
-                    </a>
-                  </div>
+          {/* Automatically Queued Overdue Debts (No manual card-by-card clicks required) */}
+          <div className="space-y-2 pt-0.5">
+            {debtors.map(({ friend, net }) => (
+              <div
+                key={friend.id}
+                className="p-2.5 rounded-2xl bg-[#05070c] border border-white/10 flex items-center justify-between gap-2"
+              >
+                <div>
+                  <p className="text-xs font-bold text-white">
+                    {friend.name}{" "}
+                    <span className="font-mono text-emerald-400 font-black">
+                      +₹{net.toLocaleString("en-IN")}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    {autoPilotRecoveryEnabled
+                      ? `Queued for 10:00 PM Auto-Sweep · UPI: ${myUpiId}`
+                      : `Awaiting Auto-Pilot authorization · UPI: ${myUpiId}`}
+                  </p>
                 </div>
-              );
-            })}
+
+                <span
+                  className={`text-[10px] font-mono font-bold ${
+                    autoPilotRecoveryEnabled ? "text-emerald-300" : "text-slate-500"
+                  }`}
+                >
+                  {autoPilotRecoveryEnabled ? "⚡ Auto-Queued" : "Paused"}
+                </span>
+              </div>
+            ))}
           </div>
         </section>
 
         {/* FEATURE 3: CUSTOM THEME STUDIO */}
         <section
-          style={{ borderColor: `${theme.accentHex}35` }}
-          className="rounded-3xl border bg-[#0d121d] p-4 space-y-3.5 shadow-[0_10px_28px_rgba(0,0,0,0.6)]"
+          className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 space-y-3.5 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(251,191,36,0.08)]"
         >
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-2.5">
@@ -1119,8 +1134,7 @@ export const ProView: React.FC<ProViewProps> = ({
 
         {/* FEATURE 4: EXECUTIVE STARK MONTHLY AUDIT (PDF / DOSSIER EXPORT) */}
         <section
-          style={{ borderColor: `${theme.accentHex}35` }}
-          className="rounded-3xl border bg-[#0d121d] p-4 space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6)]"
+          className="rounded-3xl border border-white/10 bg-[#0a0e17] p-4 space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(16,185,129,0.08)]"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5">
@@ -1144,7 +1158,7 @@ export const ProView: React.FC<ProViewProps> = ({
           </div>
 
           {/* Live Audit Telemetry Strip */}
-          <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-slate-950/90 border border-white/10 text-center font-mono">
+          <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-[#05070c] border border-white/10 text-center font-mono">
             <div>
               <span className="block text-[9px] text-slate-400 uppercase">Spent</span>
               <span className="text-xs font-black text-rose-400">
@@ -1189,14 +1203,14 @@ export const ProView: React.FC<ProViewProps> = ({
                 playProVaultChime();
                 setShowAuditPreview((v) => !v);
               }}
-              className="px-3 h-10 rounded-xl bg-slate-900 border border-white/15 text-[11px] font-bold text-slate-200 hover:text-white cursor-pointer"
+              className="px-3 h-10 rounded-xl bg-[#05070c] border border-white/10 text-[11px] font-bold text-slate-200 hover:text-white cursor-pointer"
             >
               {showAuditPreview ? "Hide" : "Preview"}
             </button>
           </div>
 
           {showAuditPreview && (
-            <div className="p-3 rounded-2xl bg-black/70 border border-emerald-500/30 space-y-2 text-[11px] font-mono animate-in fade-in">
+            <div className="p-3 rounded-2xl bg-[#05070c] border border-emerald-500/30 space-y-2 text-[11px] font-mono animate-in fade-in">
               <div className="flex items-center justify-between text-emerald-300 font-bold border-b border-white/10 pb-1.5">
                 <span>STARK AUDIT SUMMARY</span>
                 <span>SCORE: {disciplineScore}/900</span>
@@ -1218,14 +1232,12 @@ export const ProView: React.FC<ProViewProps> = ({
           4. SMART PERIMETER ALERTS & 90% AUTO-LOCKDOWN
          ===================================================================== */}
       <section
-        style={{ borderColor: `${theme.accentHex}35` }}
-        className="p-4 rounded-3xl border bg-[#0d121d] space-y-3.5 shadow-[0_10px_28px_rgba(0,0,0,0.6)]"
+        className="p-4 rounded-3xl border border-white/10 bg-[#0a0e17] space-y-3.5 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(6,182,212,0.08)]"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div
-              className="w-8 h-8 rounded-xl bg-slate-800 border flex items-center justify-center"
-              style={{ borderColor: `${theme.accentHex}40` }}
+              className="w-8 h-8 rounded-xl bg-[#05070c] border border-white/10 flex items-center justify-center"
             >
               <Bell className="w-4 h-4" style={{ color: theme.accentHex }} />
             </div>
@@ -1251,7 +1263,7 @@ export const ProView: React.FC<ProViewProps> = ({
               onToggleNotifications();
             }}
             className={`w-12 h-6.5 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-              notificationsEnabled ? "bg-emerald-500" : "bg-slate-800 border border-white/10"
+              notificationsEnabled ? "bg-emerald-500" : "bg-[#05070c] border border-white/10"
             }`}
           >
             <span
@@ -1263,7 +1275,7 @@ export const ProView: React.FC<ProViewProps> = ({
         </div>
 
         {/* Smart Auto-Lockdown at 90% */}
-        <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between">
+        <div className="pt-2 border-t border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <div>
@@ -1282,7 +1294,7 @@ export const ProView: React.FC<ProViewProps> = ({
               onToggleAutoLockdown();
             }}
             className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-              autoLockdownAt90 ? "bg-emerald-500" : "bg-slate-800 border border-white/10"
+              autoLockdownAt90 ? "bg-emerald-500" : "bg-[#05070c] border border-white/10"
             }`}
           >
             <span
@@ -1297,7 +1309,7 @@ export const ProView: React.FC<ProViewProps> = ({
           type="button"
           onClick={handleTestClick}
           disabled={isTesting}
-          className="w-full min-h-[38px] px-4 py-2 rounded-2xl border border-white/10 bg-slate-950/90 hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-xs font-bold text-slate-200 cursor-pointer"
+          className="w-full min-h-[38px] px-4 py-2 rounded-2xl border border-white/10 bg-[#05070c] hover:bg-white/5 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-xs font-bold text-slate-200 cursor-pointer"
         >
           {isTesting ? (
             <>
@@ -1313,7 +1325,230 @@ export const ProView: React.FC<ProViewProps> = ({
         </button>
       </section>
 
-      {/* Epic Debt Card Modal launched from WhatsApp Khata Auto-Collector */}
+      {/* TRUECALLER-STYLE BOTTOM STICKY CTA BAR WITH HIGH-GLOSS SLIDING REFLECTION */}
+      <div className="sticky bottom-2 z-20 pt-1">
+        <div className="p-2 rounded-2xl bg-[#020306]/95 backdrop-blur-2xl border border-cyan-500/30 shadow-[0_-10px_30px_rgba(0,0,0,0.95),0_0_25px_rgba(251,191,36,0.28)]">
+          <button
+            type="button"
+            onClick={() => handleOpenCheckoutDrawer(selectedPlan)}
+            className="relative overflow-hidden w-full min-h-[48px] px-4 rounded-xl bg-gradient-to-r from-amber-300 to-yellow-500 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_24px_rgba(251,191,36,0.65)] active:scale-[0.98] transition-all cursor-pointer group"
+          >
+            {/* Continuous + Hover High-Gloss Sliding Reflection Animation */}
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/80 to-transparent skew-x-[-25deg] translate-x-[-120%] group-hover:translate-x-[320%] transition-transform duration-1000 animate-[pulse_1.8s_ease-in-out_infinite]"
+            />
+            <Crown className="w-4 h-4 fill-slate-950 text-slate-950 relative z-10 shrink-0" />
+            <span className="relative z-10 whitespace-nowrap">
+              {selectedPlanCtaLabel}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* 1-TIME INITIAL PERMISSION CONSENT MODAL FOR JARVIS AUTO-RECOVERY */}
+      {showAutoPilotConsentModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Authorize JARVIS Auto-Recovery"
+          onClick={() => setShowAutoPilotConsentModal(false)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[390px] rounded-3xl bg-[#0b0f17] border-2 border-cyan-400/70 shadow-[0_0_45px_rgba(6,182,212,0.35)] p-5 space-y-4 text-slate-100"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-500/15 border border-cyan-400/50 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5 text-cyan-300" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-cyan-300 block">
+                    ONE-TIME PROTOCOL CONSENT
+                  </span>
+                  <h3 className="text-sm font-black text-white mt-0.5">
+                    Authorize JARVIS Auto-Recovery
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAutoPilotConsentModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-900 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-[#060911] border border-cyan-500/25 rounded-2xl p-3.5">
+              Authorize JARVIS Auto-Recovery: Allow J.A.R.V.I.S. to monitor overdue balances and auto-draft WhatsApp debt alerts when payments exceed due dates.
+            </p>
+
+            <div className="space-y-1.5 text-[11px] font-mono text-slate-400">
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>⚡ Auto-Pilot Active · Next Sweep at 10:00 PM</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>Queues overdue debts (Rohan ₹300, Kabir ₹420) automatically</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowAutoPilotConsentModal(false)}
+                className="h-10 rounded-xl bg-slate-900 border border-white/10 text-xs font-bold text-slate-400 hover:text-white cursor-pointer"
+              >
+                Not Now
+              </button>
+              <button
+                type="button"
+                onClick={handleAuthorizeAutoPilotConsent}
+                className="h-10 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(6,182,212,0.45)] cursor-pointer active:scale-95 transition-transform"
+              >
+                Authorize Agent
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SLIDING LUXURY CHECKOUT DRAWER (DYNAMIC UPI INTENT + CLEAN QR + GPAY / PHONEPE / PAYTM) */}
+      {isCheckoutDrawerOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Luxury Vault Checkout Drawer"
+          onClick={() => setIsCheckoutDrawerOpen(false)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex items-end justify-center sm:items-center p-0 sm:p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[430px] rounded-t-3xl sm:rounded-3xl bg-[#0b0f17] border-t-2 sm:border-2 border-amber-400/70 shadow-[0_-15px_50px_rgba(0,0,0,0.95),0_0_40px_rgba(251,191,36,0.28)] p-5 space-y-4 text-slate-100 animate-in slide-in-from-bottom-6 duration-250"
+          >
+            {/* Top Drag Handle & Header */}
+            <div className="w-10 h-1 rounded-full bg-white/20 mx-auto -mt-1 mb-1" />
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-mono font-black uppercase tracking-[0.22em] text-amber-300 block">
+                  SLIDING LUXURY CHECKOUT DRAWER
+                </span>
+                <h3 className="text-base font-black text-white mt-0.5">
+                  {selectedPlanTitle} · ₹{selectedPlanAmount}
+                </h3>
+                <p className="text-[11px] font-mono text-slate-400">
+                  Merchant UPI: <strong className="text-cyan-300">mrigander@upi</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCheckoutDrawerOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-900 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Clean Dynamic QR Code */}
+            <div className="flex flex-col items-center justify-center py-2 bg-[#060911] rounded-2xl border border-amber-400/30">
+              <div className="p-3 rounded-2xl bg-white shadow-[0_0_28px_rgba(251,191,36,0.4)] border-2 border-amber-400">
+                <QRCodeSVG
+                  value={proUpiDeepLink}
+                  size={152}
+                  bgColor="#ffffff"
+                  fgColor="#020617"
+                  level="M"
+                />
+              </div>
+              <span className="text-[10px] font-mono text-amber-200 mt-2">
+                Scan with any UPI app · Instant ₹{selectedPlanAmount} settlement
+              </span>
+            </div>
+
+            {/* 1-Tap Google Pay / PhonePe / Paytm Deep-Links */}
+            <div className="space-y-2">
+              <span className="block text-[10px] font-mono font-black uppercase tracking-widest text-slate-400 text-center">
+                1-TAP INSTANT UPI DEEP-LINKS
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                <a
+                  href={gpayDeepLink}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleLaunchUpiApp(gpayDeepLink, "Google Pay");
+                  }}
+                  className="h-10 rounded-xl bg-[#131b2e] hover:bg-[#19233b] border border-cyan-400/50 text-xs font-black text-cyan-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                >
+                  <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>GPay</span>
+                </a>
+
+                <a
+                  href={phonePeDeepLink}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleLaunchUpiApp(phonePeDeepLink, "PhonePe");
+                  }}
+                  className="h-10 rounded-xl bg-[#1a132e] hover:bg-[#23193d] border border-purple-400/50 text-xs font-black text-purple-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                >
+                  <Zap className="w-3.5 h-3.5 text-purple-400" />
+                  <span>PhonePe</span>
+                </a>
+
+                <a
+                  href={paytmDeepLink}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleLaunchUpiApp(paytmDeepLink, "Paytm");
+                  }}
+                  className="h-10 rounded-xl bg-[#0f2133] hover:bg-[#152c44] border border-sky-400/50 text-xs font-black text-sky-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                >
+                  <Zap className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Paytm</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Confirm & Unlock Vault Action */}
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <a
+                href={proUpiDeepLink}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleLaunchUpiApp(proUpiDeepLink, "Default UPI App");
+                }}
+                className="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-amber-400/40 text-amber-300 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>UPI Intent</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playProVaultChime();
+                  if (!isProActive) {
+                    fireConfettiBurst("#fbbf24");
+                    onTogglePro();
+                  }
+                  setIsCheckoutDrawerOpen(false);
+                  onShowToast?.(`👑 ${selectedPlanTitle} Activated!`);
+                }}
+                className="h-11 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(251,191,36,0.45)] cursor-pointer active:scale-95 transition-transform"
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>Unlock Vault</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Epic Debt Card Modal */}
       {selectedDebtFriend && (
         <EpicDebtCardModal
           isOpen={true}

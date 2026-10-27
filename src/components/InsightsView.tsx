@@ -666,7 +666,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
             <span>Share Story</span>
           </button>
 
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0a0e17] border border-white/10">
             <button
               type="button"
               onClick={() => setRangeDays(7)}
@@ -760,7 +760,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
       {/* FEATURE 3: "HABIT LEAK ANNUAL PROJECTOR" (MICRO-TRANSACTIONS UNDER ₹50) */}
       <section
         aria-label="Habit Leak Annual Projector"
-        className="p-4 rounded-3xl border border-amber-400/45 bg-[#0b0f17] shadow-[0_0_24px_rgba(251,191,36,0.16)] space-y-2.5 relative overflow-hidden"
+        className="p-4 rounded-3xl border border-white/10 bg-[#0a0e17] shadow-[0_0_24px_rgba(251,191,36,0.12)] space-y-2.5 relative overflow-hidden"
       >
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -779,7 +779,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
           </span>
         </div>
 
-        <div className="p-3 rounded-2xl bg-[#060911] border border-rose-500/40 space-y-1">
+        <div className="p-3 rounded-2xl bg-[#05070c] border border-rose-500/40 space-y-1">
           <p className="text-xs font-black text-rose-300 leading-snug">
             &ldquo;At this rate, you bleed ₹18,250 every year on micro-cravings.&rdquo;
           </p>
@@ -797,7 +797,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
             {habitLeakTelemetry.recentItems.map((item) => (
               <span
                 key={item.id}
-                className="px-2 py-0.5 rounded-lg bg-slate-900 border border-white/10 text-[10px] font-mono text-slate-300"
+                className="px-2 py-0.5 rounded-lg bg-[#05070c] border border-white/10 text-[10px] font-mono text-slate-300"
               >
                 {item.title}: <strong className="text-amber-300">₹{item.amount}</strong>
               </span>
@@ -810,13 +810,9 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
       <section
         aria-label="Financial Runway and Garibi Index"
         style={{
-          borderColor:
-            runwayTelemetry.daysOfSurvivalLeft <= 5
-              ? "rgba(244, 63, 94, 0.6)"
-              : `${theme.accentHex}45`,
           boxShadow: `0 0 24px ${theme.ringGlow}`,
         }}
-        className="p-4 rounded-3xl border bg-gradient-to-br from-slate-900/95 via-slate-950 to-slate-900/90 backdrop-blur-xl space-y-3 relative overflow-hidden"
+        className="p-4 rounded-3xl border border-white/10 bg-[#0a0e17] backdrop-blur-xl space-y-3 relative overflow-hidden"
       >
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -924,13 +920,13 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
 
       {/* KPI Cards Strip */}
       <div className="grid grid-cols-2 gap-2.5">
-        <div className="p-3.5 rounded-2xl border border-white/10 bg-slate-900/70 backdrop-blur-md shadow-xs">
+        <div className="p-3.5 rounded-2xl border border-white/10 bg-[#0a0e17] backdrop-blur-md shadow-[0_6px_20px_rgba(0,0,0,0.6),0_0_14px_rgba(6,182,212,0.06)]">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Outflow</span>
           <p className="font-mono tabular-nums text-xl font-extrabold text-white mt-0.5">
             ₹{totalSpent.toLocaleString("en-IN")}
           </p>
         </div>
-        <div className="p-3.5 rounded-2xl border border-white/10 bg-slate-900/70 backdrop-blur-md shadow-xs">
+        <div className="p-3.5 rounded-2xl border border-white/10 bg-[#0a0e17] backdrop-blur-md shadow-[0_6px_20px_rgba(0,0,0,0.6),0_0_14px_rgba(6,182,212,0.06)]">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Discipline Streak</span>
           <p
             className="font-mono tabular-nums text-xl font-extrabold mt-0.5"
@@ -944,8 +940,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
 
       {/* Category Spending Map Card */}
       <section
-        style={{ borderColor: `${theme.accentHex}30` }}
-        className="p-4 rounded-3xl border bg-slate-900/80 backdrop-blur-md space-y-3 shadow-md"
+        className="p-4 rounded-3xl border border-white/10 bg-[#0a0e17] backdrop-blur-md space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(6,182,212,0.08)]"
       >
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-200">Spending Map</span>
@@ -955,7 +950,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
         {categoryStats.length > 0 ? (
           <>
             {/* Visual Mosaic Bar */}
-            <div className="h-3 w-full rounded-full overflow-hidden flex bg-slate-950 border border-white/10">
+            <div className="h-3 w-full rounded-full overflow-hidden flex bg-[#05070c] border border-white/10">
               {categoryStats.map((stat) => (
                 <div
                   key={stat.category}
@@ -963,7 +958,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
                     width: `${Math.max(stat.percent, 4)}%`,
                     backgroundColor: stat.color,
                   }}
-                  className="h-full border-r border-slate-950 last:border-r-0"
+                  className="h-full border-r border-[#05070c] last:border-r-0"
                 />
               ))}
             </div>
@@ -977,7 +972,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 min-w-0">
                         <span
-                          className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 bg-slate-800 border border-white/5"
+                          className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 bg-[#05070c] border border-white/10"
                           style={{ color: stat.color }}
                         >
                           <Icon className="w-3 h-3" />
@@ -995,7 +990,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
                         </span>
                       </div>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-slate-950 overflow-hidden">
+                    <div className="h-1.5 w-full rounded-full bg-[#05070c] overflow-hidden">
                       <div
                         className="h-full rounded-full"
                         style={{
@@ -1016,8 +1011,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
 
       {/* 7-Day Discipline Bar Chart */}
       <section
-        style={{ borderColor: `${theme.accentHex}30` }}
-        className="p-4 rounded-3xl border bg-slate-900/80 backdrop-blur-md space-y-3 shadow-md"
+        className="p-4 rounded-3xl border border-white/10 bg-[#0a0e17] backdrop-blur-md space-y-3 shadow-[0_10px_28px_rgba(0,0,0,0.6),0_0_18px_rgba(6,182,212,0.08)]"
       >
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-200">7-Day Discipline</span>

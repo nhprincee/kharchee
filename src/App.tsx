@@ -21,6 +21,8 @@ import {
   playCashRegisterChime,
   playArmorBootSound,
   playMidnightCravingsChime,
+  playStarkPowerSurgeSwoosh,
+  playMetallicCoinChime,
 } from "./utils/celebration";
 import {
   detectClipboardTransaction,
@@ -716,6 +718,7 @@ export function App() {
     if (isMidnightCraving) {
       playMidnightCravingsChime();
     } else {
+      playStarkPowerSurgeSwoosh();
       playQuickAddChirp();
     }
 
@@ -755,6 +758,7 @@ export function App() {
     if (isMidnightCraving) {
       playMidnightCravingsChime();
     } else {
+      playStarkPowerSurgeSwoosh();
       playQuickAddChirp();
     }
 
@@ -918,6 +922,7 @@ export function App() {
         ) || 500
       : 500;
 
+    playMetallicCoinChime();
     playCashRegisterChime();
 
     // Feature 2: "DESI SOUNDBOX VOICE" in Khata
@@ -966,13 +971,12 @@ export function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-black flex justify-center items-start sm:py-3 sm:px-4">
-      {/* 1. MOBILE-FIRST COMPACT CONTAINER (max-w-[430px] mx-auto min-h-screen px-4 py-3) */}
+    <div className="min-h-screen bg-black flex justify-center items-start">
+      {/* 1. MOBILE-FIRST COMPACT CONTAINER */}
       <div
-        className="w-full max-w-[430px] min-h-screen sm:min-h-[860px] sm:max-h-[920px] bg-slate-950 sm:border sm:rounded-[40px] flex flex-col relative overflow-hidden transition-all duration-500"
+        className="w-full max-w-[430px] min-h-screen bg-[#090d16] sm:border-x border-[#1a2234] flex flex-col relative overflow-x-hidden"
         style={{
-          borderColor: `${theme.accentHex}40`,
-          boxShadow: `0 0 45px ${theme.accentHex}18, 0 25px 60px rgba(0,0,0,0.95)`,
+          backgroundColor: "#090d16",
         }}
       >
         <ThemeBackdrop theme={theme} />
@@ -1003,73 +1007,60 @@ export function App() {
           onOpenRewardVault={() => setIsRewardVaultOpen(true)}
         />
 
-        {/* Sub-Header Telemetry & Quick Utility Strip */}
+        {/* Sleek Single-Row Horizontal Slide Tray with Monochrome Glass Badges */}
         <div
-          className="px-4 py-2 bg-[#0b0f17]/95 border-b flex items-center justify-between gap-1.5 shrink-0 backdrop-blur-xl"
-          style={{ borderColor: `${theme.accentHex}20` }}
+          style={{
+            backgroundColor: "#000000",
+            backgroundImage: "none",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+            boxShadow: "none",
+          }}
+          className="px-4 py-2.5 !bg-black !bg-none !shadow-none flex items-center justify-between gap-2 shrink-0 relative z-30"
         >
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar whitespace-nowrap pr-1">
             {/* Live date badge */}
-            <div className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-900/90 border border-white/10 text-[10px] font-medium text-slate-300 font-mono shadow-xs">
+            <div className="inline-flex items-center px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] font-medium text-white/70 font-mono shrink-0">
               {formatLiveHeaderDate(now)}
             </div>
 
-            {/* Discipline Shield: Awarded when daily spend remains strictly under 50% limit */}
-            {dailyLimit > 0 && todaySpent <= dailyLimit * 0.5 && (
-              <button
-                type="button"
-                onClick={() => handleTriggerCelebration("shield")}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-[10px] font-bold text-emerald-300 font-mono shadow-xs hover:border-emerald-300 active:scale-95 transition-all cursor-pointer"
-                title="Discipline Shield Active (Spend < 50% limit) · Tap to celebrate"
-              >
-                <Shield className="w-2.5 h-2.5 text-emerald-400" />
-                <span>Shield 50%</span>
-              </button>
-            )}
-
-            {/* Glowing Mystery Vault Chest when user logs expenses or stays under budget */}
-            {(expenses.length > 0 || todaySpent <= dailyLimit) && (
-              <button
-                type="button"
-                onClick={() => setIsRewardVaultOpen(true)}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/60 text-[10px] font-bold text-amber-300 font-mono shadow-[0_0_12px_rgba(251,191,36,0.35)] hover:border-amber-300 active:scale-95 transition-all cursor-pointer"
-                title="Stark Reward Vault · Spin Daily Discipline Roulette"
-              >
-                <span>🎁</span>
-                <span>Mystery Vault</span>
-              </button>
-            )}
-
-            {/* 1-Tap "Bail Me Out" (Fake Mom Call Escape) */}
+            {/* Monochrome Glass Utility Slide Tray */}
             <button
               type="button"
-              onClick={handleTriggerFakeMomCall}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/60 text-[10px] font-bold text-emerald-300 font-mono shadow-[0_0_10px_rgba(16,185,129,0.3)] hover:border-emerald-300 active:scale-95 transition-all cursor-pointer"
-              title="Fake Mom Call Escape · Trigger Incoming Call: Mummy ❤️"
+              onClick={() => setIsRewardVaultOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors text-[10px] font-medium font-mono shrink-0 cursor-pointer"
+              title="Open Reward Vault"
             >
-              <span>📞</span>
-              <span>Bail Me Out</span>
+              <span className="text-white/90">✦</span>
+              <span>Vault</span>
             </button>
 
-            {/* 1-Tap Manual Paste SMS trigger for Clipboard Detection */}
             <button
               type="button"
               onClick={() => void checkClipboardForTransactions(true)}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/90 border border-cyan-400/40 text-[10px] font-bold text-cyan-300 font-mono shadow-xs hover:border-cyan-300 active:scale-95 transition-all cursor-pointer"
-              title="Inspect clipboard for bank/UPI transaction SMS"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors text-[10px] font-medium font-mono shrink-0 cursor-pointer"
+              title="Paste Bank SMS"
             >
-              <span>📋</span>
+              <span className="text-white/90">⌘</span>
               <span>Paste SMS</span>
             </button>
 
-            {/* 1-Tap Replay Stark Morning Briefing Audio HUD */}
+            <button
+              type="button"
+              onClick={handleTriggerFakeMomCall}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors text-[10px] font-medium font-mono shrink-0 cursor-pointer"
+              title="Bail Me Out (Simulated Call)"
+            >
+              <PhoneIncoming className="w-2.5 h-2.5 text-white/80" />
+              <span>Bail Out</span>
+            </button>
+
             <button
               type="button"
               onClick={() => triggerStarkMorningBriefing(dailyLimit)}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/90 border border-emerald-400/40 text-[10px] font-bold text-emerald-300 font-mono shadow-xs hover:border-emerald-300 active:scale-95 transition-all cursor-pointer"
-              title="Replay Stark Morning Briefing Audio HUD"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors text-[10px] font-medium font-mono shrink-0 cursor-pointer"
+              title="Morning Briefing"
             >
-              <span>🎙️</span>
+              <span className="text-white/90">◉</span>
               <span>Briefing</span>
             </button>
           </div>
@@ -1078,21 +1069,19 @@ export function App() {
             <button
               type="button"
               onClick={() => setIsProTeaserOpen(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/15 via-yellow-500/20 to-amber-500/15 border border-amber-400/40 text-[10px] font-bold text-amber-300 font-mono shadow-xs hover:border-amber-400 hover:text-amber-200 active:scale-95 transition-all cursor-pointer shrink-0"
-              title="Unlock Kharche PRO Black · 3 Days Free Trial"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#e6c875]/15 border border-[#e6c875]/40 text-[#e6c875] hover:bg-[#e6c875]/25 font-semibold text-[10px] font-mono tracking-tight transition-colors cursor-pointer shrink-0"
+              title="Unlock Kharche PRO Black"
             >
-              <Crown className="w-3 h-3 text-amber-400" />
-              <span>PRO · 3d Free</span>
+              <span>★ PRO Black</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={() => setActiveTab("pro")}
-              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-900 border border-white/20 text-[10px] font-bold text-slate-200 font-mono shadow-xs cursor-pointer hover:border-white/40 shrink-0"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#e6c875]/15 border border-[#e6c875]/40 text-[#e6c875] hover:bg-[#e6c875]/25 font-semibold text-[10px] font-mono tracking-tight cursor-pointer transition-colors shrink-0"
               title="PRO Active Member"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span className="text-amber-300">★ PRO Black</span>
+              <span>★ PRO Black</span>
             </button>
           )}
         </div>
@@ -1103,7 +1092,7 @@ export function App() {
             role="status"
             aria-label="Stark Morning Telemetry Briefing"
             onClick={() => setIsMorningBriefingOpen(false)}
-            className="mx-4 my-2 p-3.5 rounded-2xl border-2 border-cyan-400/80 bg-slate-950/95 backdrop-blur-2xl shadow-[0_0_35px_rgba(34,211,238,0.45)] relative z-40 animate-in fade-in slide-in-from-top-3 duration-300 cursor-pointer overflow-hidden"
+            className="mx-4 my-2 p-3.5 rounded-2xl border border-cyan-400/60 bg-[#0a0e17]/95 backdrop-blur-2xl shadow-[0_0_35px_rgba(34,211,238,0.45)] relative z-40 animate-in fade-in slide-in-from-top-3 duration-300 cursor-pointer overflow-hidden"
           >
             <div className="flex items-start justify-between gap-2.5">
               <div className="flex items-center gap-2.5">
@@ -1150,7 +1139,7 @@ export function App() {
           <aside
             role="alert"
             aria-label="Detected Banking Transaction"
-            className="mx-4 my-2 p-3.5 rounded-2xl border bg-slate-900/95 backdrop-blur-xl shadow-2xl relative z-30 animate-in slide-in-from-top-2 duration-300"
+            className="mx-4 my-2 p-3.5 rounded-2xl border border-white/10 bg-[#0a0e17] backdrop-blur-xl shadow-2xl relative z-30 animate-in slide-in-from-top-2 duration-300"
             style={{
               borderColor: `${theme.accentHex}70`,
               boxShadow: `0 8px 30px rgba(0,0,0,0.8), 0 0 25px ${theme.ringGlow}`,
@@ -1172,7 +1161,7 @@ export function App() {
                     >
                       Bank SMS Detected
                     </span>
-                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-slate-950 border border-white/10 text-slate-400">
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-[#05070c] border border-white/10 text-slate-400">
                       {detectedTxn.category} · {detectedTxn.paymentMode}
                     </span>
                   </div>
@@ -1190,7 +1179,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => setDetectedTxn(null)}
-                className="w-6 h-6 rounded-full bg-slate-950 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer shrink-0 transition-colors"
+                className="w-6 h-6 rounded-full bg-[#05070c] border border-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer shrink-0 transition-colors"
                 aria-label="Dismiss detected transaction"
               >
                 <X className="w-3.5 h-3.5" />
@@ -1218,7 +1207,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => setDetectedTxn(null)}
-                className="px-3.5 h-9 rounded-xl bg-slate-950 hover:bg-slate-800 border border-white/10 text-xs font-bold text-slate-400 hover:text-slate-200 cursor-pointer transition-colors"
+                className="px-3.5 h-9 rounded-xl bg-[#05070c] hover:bg-white/5 border border-white/10 text-xs font-bold text-slate-400 hover:text-slate-200 cursor-pointer transition-colors"
               >
                 Dismiss
               </button>
@@ -1226,11 +1215,14 @@ export function App() {
           </aside>
         )}
 
-        {/* Scrollable Body Content */}
-        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-4 pb-20">
+        {/* Scrollable Body Content — Dark Obsidian Minimalism with generous space-y-6 padding */}
+        <div
+          style={{ backgroundColor: "#090d16" }}
+          className="flex-1 overflow-y-auto bg-[#090d16] px-4 py-4 space-y-6 pb-28 relative z-10"
+        >
           {activeTab === "home" && (
-            <div className="space-y-4">
-              {/* 3 & 4. SYMMETRICAL BUDGET METER + COMPACT DUAL BUTTONS + QUICK ADD */}
+            <div className="space-y-6">
+              {/* AESTHETIC HERO CARD + QUICK ADD */}
               <BudgetWidget
                 dailyLimit={dailyLimit}
                 todaySpent={todaySpent}
@@ -1255,21 +1247,18 @@ export function App() {
                 onTriggerFakeMomCall={handleTriggerFakeMomCall}
               />
 
-              {/* 5. FAN-ZONE THEMES WITH CUSTOM VECTOR BADGES & GRID SELECTOR */}
-              <section id="tour-themes-bar" aria-label="Fan-Zone Themes" className="pt-1 space-y-2">
+              {/* FAN-ZONE THEMES */}
+              <section id="tour-themes-bar" aria-label="Fan-Zone Themes" className="space-y-3">
                 <div className="flex items-center justify-between px-1">
-                  <span
-                    className="text-[11px] font-bold uppercase tracking-wider transition-colors duration-300"
-                    style={{ color: theme.accentHex }}
-                  >
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
                     Fan-Zone Themes
                   </span>
                   <button
                     type="button"
                     onClick={() => setActiveTab("pro")}
-                    className="text-[10px] text-slate-400 hover:text-white font-medium cursor-pointer"
+                    className="text-[10px] text-white/50 hover:text-white font-medium cursor-pointer transition-colors"
                   >
-                    Full Theme Studio →
+                    Theme Studio →
                   </button>
                 </div>
                 <ThemeSelector
@@ -1281,21 +1270,18 @@ export function App() {
                 />
               </section>
 
-              {/* 5. PRESERVED RECENT EXPENSES LIST ("Your Money, At A Glance") */}
-              <section aria-label="Recent Expenses" className="space-y-2 pt-1">
+              {/* RECENT EXPENSES LIST ("Your Money, At A Glance") */}
+              <section aria-label="Recent Expenses" className="space-y-3">
                 <div className="flex items-center justify-between px-1">
-                  <span
-                    className="text-[11px] font-bold uppercase tracking-wider transition-colors duration-300"
-                    style={{ color: theme.accentHex }}
-                  >
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
                     Your Money, At A Glance
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono">Swipe to delete</span>
+                  <span className="text-[10px] text-white/40 font-mono tracking-tight">Swipe to delete</span>
                 </div>
 
                 {recentExpenses.length === 0 ? (
-                  <div className="p-6 rounded-2xl border border-slate-800/80 bg-slate-900/40 text-center">
-                    <p className="text-xs text-slate-400">No expenses logged today yet</p>
+                  <div className="p-6 rounded-2xl border border-white/[0.07] bg-white/[0.02] text-center">
+                    <p className="text-xs text-white/40">No expenses logged today yet</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1786,22 +1772,65 @@ export function App() {
           </div>
         )}
 
-        {/* Native Mobile Bottom Navigation Bar (5 Tabs) - Elevated Obsidian Titanium Dock */}
+        {/* Native Mobile Bottom Navigation Bar (5 Tabs) - Forcibly Isolated Fixed Pure Solid Black */}
         <nav
           aria-label="Navigation"
-          className="sticky bottom-0 z-30 h-16 bg-[#0b0f17]/95 backdrop-blur-xl border-t border-cyan-500/20 px-2 flex items-center justify-around shrink-0 transition-all duration-300 shadow-[0_-8px_28px_rgba(0,0,0,0.85),0_-2px_18px_rgba(6,182,212,0.16)]"
+          style={{
+            backgroundColor: "#000000",
+            backgroundImage: "none",
+            borderTop: "1px solid #1a2234",
+            boxShadow: "0 -10px 25px rgba(0,0,0,0.8)",
+          }}
+          className="fixed bottom-0 left-0 right-0 z-50 max-w-[430px] mx-auto h-16 !bg-black !bg-none !backdrop-blur-none px-2 flex items-center justify-around shrink-0"
         >
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.id;
+            const isProTab = item.id === "pro";
+
+            if (isProTab) {
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveTab(item.id)}
+                  className={`flex flex-col items-center justify-center flex-1 py-1.5 rounded-2xl mx-0.5 transition-colors cursor-pointer relative ${
+                    active
+                      ? "bg-[#0a0e17] border border-amber-400/50"
+                      : "bg-transparent hover:bg-[#0a0e17] border border-transparent"
+                  }`}
+                >
+                  {/* Micro "VIP" Gold Pill Badge Above the Crown */}
+                  <span className="absolute -top-2 px-1.5 py-[1px] rounded-full bg-amber-400 text-black font-mono text-[8px] font-black uppercase tracking-wider leading-tight whitespace-nowrap">
+                    ★ VIP
+                  </span>
+
+                  <div className="relative flex flex-col items-center mt-1">
+                    <Crown
+                      className="w-5 h-5 text-amber-400 transition-transform duration-200"
+                      style={{
+                        fill: active ? "rgba(251, 191, 36, 0.35)" : "rgba(251, 191, 36, 0.15)",
+                      }}
+                    />
+                    {active && (
+                      <span className="w-1.5 h-1.5 rounded-full mt-0.5 bg-amber-400" />
+                    )}
+                  </div>
+                  <span className="text-[10px] font-black tracking-wider text-amber-400">
+                    {item.label}
+                  </span>
+                </button>
+              );
+            }
+
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`flex flex-col items-center justify-center flex-1 py-1.5 rounded-2xl mx-0.5 transition-all cursor-pointer relative ${
+                className={`flex flex-col items-center justify-center flex-1 py-1.5 rounded-2xl mx-0.5 transition-colors cursor-pointer relative ${
                   active
-                    ? "text-cyan-300 bg-cyan-500/10 border border-cyan-500/25 shadow-[0_0_12px_rgba(6,182,212,0.2)]"
+                    ? "text-cyan-300 bg-[#0a0e17] border border-[#1a2234]"
                     : "text-slate-400 hover:text-slate-200 border border-transparent"
                 }`}
               >
@@ -1810,15 +1839,10 @@ export function App() {
                     className="w-5 h-5 transition-transform duration-200"
                     style={{
                       color: active ? "#22d3ee" : undefined,
-                      filter: active
-                        ? "drop-shadow(0 0 8px rgba(34, 211, 238, 0.75))"
-                        : undefined,
                     }}
                   />
                   {active && (
-                    <span
-                      className="w-1.5 h-1.5 rounded-full mt-0.5 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]"
-                    />
+                    <span className="w-1.5 h-1.5 rounded-full mt-0.5 bg-cyan-400" />
                   )}
                 </div>
                 <span

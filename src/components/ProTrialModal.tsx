@@ -36,14 +36,13 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300"
     >
       <div
-        className="w-full max-w-[420px] rounded-[32px] border bg-gradient-to-b from-slate-950 via-slate-900 to-black p-5 sm:p-6 shadow-2xl relative overflow-hidden"
+        className="w-full max-w-[420px] rounded-[32px] border border-white/10 bg-[#05070c] p-5 sm:p-6 shadow-2xl relative overflow-hidden"
         style={{
-          borderColor: "#e2e8f0",
-          boxShadow: `0 0 45px rgba(255, 215, 0, 0.25), 0 20px 50px rgba(0,0,0,0.9)`,
+          boxShadow: `0 0 45px rgba(251, 191, 36, 0.25), 0 20px 50px rgba(0,0,0,0.95)`,
         }}
       >
         {/* Holographic Rainbow Border Shimmer Line */}
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-rose-500 via-amber-400 to-cyan-400 opacity-90 animate-pulse" />
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-300 via-yellow-500 to-cyan-400 opacity-90 animate-pulse" />
 
         {/* Ambient Golden Radial Glow */}
         <div className="absolute top-0 right-0 w-48 h-48 rounded-full pointer-events-none opacity-20 blur-3xl bg-amber-400" />
@@ -52,7 +51,7 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
         <button
           type="button"
           onClick={onDismiss}
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-900/80 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer z-10"
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#0a0e17] border border-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer z-10"
           aria-label="Close Pro Offer"
         >
           <X className="w-4 h-4" />
@@ -62,7 +61,7 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
         <div className="flex items-center gap-2 mb-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-300 font-mono text-[10px] font-extrabold tracking-wider uppercase shadow-xs">
             <Crown className="w-3.5 h-3.5 text-amber-400" />
-            <span>Welcome Privilege · 3 Days Free</span>
+            <span>Welcome Privilege · 3 Days Free (Then ₹39/mo)</span>
           </div>
         </div>
 
@@ -73,7 +72,7 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
             className="text-2xl font-black text-white tracking-tight leading-tight flex items-center gap-2"
           >
             <span>Kharche PRO</span>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 text-sm px-2 py-0.5 rounded-lg border border-amber-500/30 bg-amber-950/40 font-mono font-bold">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-500 text-sm px-2 py-0.5 rounded-lg border border-amber-500/30 bg-amber-950/40 font-mono font-bold">
               BLACK
             </span>
           </h2>
@@ -84,7 +83,7 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
 
         {/* Metallic Holographic Feature Roster */}
         <div className="space-y-2.5 mb-5">
-          <div className="p-3 rounded-2xl bg-slate-900/80 border border-white/10 flex items-start gap-3">
+          <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 flex items-start gap-3">
             <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center text-cyan-300 shrink-0">
               <Zap className="w-4 h-4" />
             </div>
@@ -101,13 +100,13 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-900/80 border border-white/10 flex items-start gap-3">
+          <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 flex items-start gap-3">
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-400/30 flex items-center justify-center text-amber-300 shrink-0">
               <Palette className="w-4 h-4" />
             </div>
             <div>
               <h4 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                <span>All 4 Fan-Zone Themes</span>
+                <span>All Fan-Zone Themes &amp; Studio</span>
                 <span className="text-[9px] px-1.5 py-0.2 rounded-sm bg-amber-500/20 text-amber-300 font-mono">
                   UNLOCKED
                 </span>
@@ -118,13 +117,13 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-900/80 border border-white/10 flex items-start gap-3">
+          <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 flex items-start gap-3">
             <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shrink-0">
               <Share2 className="w-4 h-4" />
             </div>
             <div>
               <h4 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                <span>Smart WhatsApp Khata & Split</span>
+                <span>Smart WhatsApp Khata &amp; Split</span>
               </h4>
               <p className="text-[11px] text-slate-400 leading-snug mt-0.5">
                 1-tap formatted settlement messages and pre-filled UPI payment links sent straight to friends.
@@ -132,13 +131,13 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-900/80 border border-white/10 flex items-start gap-3">
+          <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 flex items-start gap-3">
             <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-400/30 flex items-center justify-center text-purple-300 shrink-0">
               <Cloud className="w-4 h-4" />
             </div>
             <div>
               <h4 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                <span>Cloud Sync & Multi-Device</span>
+                <span>Cloud Sync &amp; Multi-Device</span>
               </h4>
               <p className="text-[11px] text-slate-400 leading-snug mt-0.5">
                 Automatic ledger sync across phone, tablet, and browser sessions.
@@ -152,9 +151,9 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
           <button
             type="button"
             onClick={onClaimTrial}
-            className="w-full h-12 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-xl active:scale-[0.98] transition-all cursor-pointer"
+            className="w-full h-12 rounded-2xl bg-gradient-to-r from-amber-300 to-yellow-500 hover:brightness-110 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-xl active:scale-[0.98] transition-all cursor-pointer"
             style={{
-              boxShadow: "0 0 30px rgba(251, 191, 36, 0.4)",
+              boxShadow: "0 0 30px rgba(251, 191, 36, 0.45)",
             }}
           >
             <Crown className="w-4 h-4 fill-slate-950" />

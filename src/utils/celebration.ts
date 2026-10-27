@@ -449,6 +449,164 @@ export function playMidnightCravingsChime(): void {
   }
 }
 
+/**
+ * 8. High-tech mechanical tick on typing expense numbers (Web Audio API + micro-haptic)
+ */
+export function playMechanicalKeyTick(): void {
+  try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(8);
+    }
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
 
+    const ctx = new AudioContextClass();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
 
+    const now = ctx.currentTime;
 
+    // Crisp transient mechanical switch click
+    const clickOsc = ctx.createOscillator();
+    const clickGain = ctx.createGain();
+    clickOsc.type = "triangle";
+    clickOsc.frequency.setValueAtTime(1850, now);
+    clickOsc.frequency.exponentialRampToValueAtTime(420, now + 0.022);
+
+    clickGain.gain.setValueAtTime(0.001, now);
+    clickGain.gain.linearRampToValueAtTime(0.16, now + 0.003);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.026);
+
+    clickOsc.connect(clickGain);
+    clickGain.connect(ctx.destination);
+    clickOsc.start(now);
+    clickOsc.stop(now + 0.03);
+
+    // Subtle metallic keycap bottom-out resonance
+    const bodyOsc = ctx.createOscillator();
+    const bodyGain = ctx.createGain();
+    bodyOsc.type = "sine";
+    bodyOsc.frequency.setValueAtTime(3200, now);
+    bodyOsc.frequency.exponentialRampToValueAtTime(1200, now + 0.015);
+
+    bodyGain.gain.setValueAtTime(0.06, now);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
+
+    bodyOsc.connect(bodyGain);
+    bodyGain.connect(ctx.destination);
+    bodyOsc.start(now);
+    bodyOsc.stop(now + 0.02);
+  } catch {
+    // Ignore audio errors
+  }
+}
+
+/**
+ * 9. Deep Stark power-surge swoosh when logging an expense (Web Audio API + haptic burst)
+ */
+export function playStarkPowerSurgeSwoosh(): void {
+  try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate([20, 25, 40]);
+    }
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const ctx = new AudioContextClass();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+
+    // Deep sub-bass reactor surge (55Hz -> 290Hz -> 95Hz)
+    const subOsc = ctx.createOscillator();
+    const subGain = ctx.createGain();
+    subOsc.type = "sawtooth";
+    subOsc.frequency.setValueAtTime(55, now);
+    subOsc.frequency.exponentialRampToValueAtTime(290, now + 0.16);
+    subOsc.frequency.exponentialRampToValueAtTime(95, now + 0.34);
+
+    subGain.gain.setValueAtTime(0.001, now);
+    subGain.gain.linearRampToValueAtTime(0.24, now + 0.05);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+
+    subOsc.connect(subGain);
+    subGain.connect(ctx.destination);
+    subOsc.start(now);
+    subOsc.stop(now + 0.38);
+
+    // High-tech cyan plasma swoosh harmonic (240Hz -> 1680Hz)
+    const swooshOsc = ctx.createOscillator();
+    const swooshGain = ctx.createGain();
+    swooshOsc.type = "sine";
+    swooshOsc.frequency.setValueAtTime(240, now);
+    swooshOsc.frequency.exponentialRampToValueAtTime(1680, now + 0.24);
+
+    swooshGain.gain.setValueAtTime(0.001, now);
+    swooshGain.gain.linearRampToValueAtTime(0.18, now + 0.06);
+    swooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+    swooshOsc.connect(swooshGain);
+    swooshGain.connect(ctx.destination);
+    swooshOsc.start(now);
+    swooshOsc.stop(now + 0.3);
+  } catch {
+    // Ignore audio errors
+  }
+}
+
+/**
+ * 10. Metallic coin chime when settling a Khata debt (Web Audio API + haptic pulse)
+ */
+export function playMetallicCoinChime(): void {
+  try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate([30, 35, 55]);
+    }
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const ctx = new AudioContextClass();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    // Sovereign gold coin strike + high metallic shimmer harmonics
+    const harmonics = [
+      { freq: 1318.51, delay: 0, duration: 0.16, vol: 0.18, type: "sine" as OscillatorType },
+      { freq: 1975.53, delay: 0.055, duration: 0.38, vol: 0.22, type: "sine" as OscillatorType },
+      { freq: 2637.02, delay: 0.09, duration: 0.45, vol: 0.14, type: "triangle" as OscillatorType },
+      { freq: 3951.07, delay: 0.09, duration: 0.32, vol: 0.08, type: "sine" as OscillatorType },
+    ];
+
+    harmonics.forEach(({ freq, delay, duration, vol, type }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now + delay);
+
+      const start = now + delay;
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.linearRampToValueAtTime(vol, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0008, start + duration);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(start);
+      osc.stop(start + duration + 0.02);
+    });
+  } catch {
+    // Ignore audio errors
+  }
+}

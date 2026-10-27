@@ -1,9 +1,10 @@
 import express from "express";
 import type { Request, Response } from "express";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
-import { FunctionDeclaration, GoogleGenAI, Type } from "@google/genai";
+import { type FunctionDeclaration, GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
 
@@ -1072,11 +1073,18 @@ async function startServer() {
     });
   });
 
-  if (process.env.NODE_ENV === "production") {
-    const distPath = path.resolve(__dirname, "dist");
+  const distPath = path.resolve(__dirname, "dist");
+  const distIndexHtml = path.join(distPath, "index.html");
+  const isProdEnv = process.env.NODE_ENV === "production";
+
+  if (isProdEnv && fs.existsSync(distIndexHtml)) {
     app.use(express.static(distPath));
     app.get("*", (_req: Request, res: Response) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      if (fs.existsSync(distIndexHtml)) {
+        res.sendFile(distIndexHtml);
+      } else {
+        res.sendFile(path.resolve(__dirname, "index.html"));
+      }
     });
   } else {
     const { createServer: createViteServer } = await import("vite");

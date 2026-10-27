@@ -14,9 +14,11 @@ import {
   Check,
   Flame,
   RefreshCw,
+  QrCode,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import type { Expense, ExpenseCategory } from "../types";
-import { playQuickAddChirp } from "../utils/celebration";
+import { playQuickAddChirp, playStarkPowerSurgeSwoosh } from "../utils/celebration";
 
 interface SwipeableExpenseRowProps {
   expense: Expense;
@@ -72,6 +74,7 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [roastMode, setRoastMode] = useState(true);
   const [roastIndex, setRoastIndex] = useState(0);
+  const [showReceiptQr, setShowReceiptQr] = useState(true);
 
   const startXRef = useRef<number | null>(null);
   const currentOffsetRef = useRef<number>(0);
@@ -182,7 +185,7 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] hover:border-white/20 bg-slate-900/70 select-none group backdrop-blur-sm transition-colors shadow-sm">
+    <div className="relative overflow-hidden rounded-2xl border border-white/5 hover:border-amber-400/30 bg-[#0a0e17] select-none group transition-colors">
       {/* Revealed Delete Action Behind Row */}
       <div className="absolute inset-y-0 right-0 w-24 bg-rose-600/90 flex items-center justify-end pr-4">
         <button
@@ -206,12 +209,12 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
         onMouseUp={handleMouseUpOrLeave}
         onMouseLeave={handleMouseUpOrLeave}
         style={{ transform: `translateX(${offsetX}px)` }}
-        className={`relative z-10 flex items-center justify-between gap-2.5 px-3.5 py-3 bg-slate-900/95 hover:bg-slate-900 ${
+        className={`relative z-10 flex items-center justify-between gap-2.5 px-3.5 py-3 bg-[#0a0e17] hover:bg-[#0d131f] ${
           isDragging ? "" : "transition-transform duration-150 ease-out"
         } cursor-grab active:cursor-grabbing`}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-slate-800/90 border border-white/10 flex items-center justify-center shrink-0 text-slate-200 shadow-xs">
+          <div className="w-9 h-9 rounded-xl bg-[#090d15] border border-white/5 flex items-center justify-center shrink-0 text-[#e6c875]">
             <Icon className="w-4 h-4" />
           </div>
 
@@ -244,16 +247,16 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
             }}
             className={`px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
               isSplitOpen
-                ? "bg-cyan-500/20 border-cyan-400/60 text-cyan-300"
-                : "bg-slate-800/80 border-white/10 text-slate-300 hover:text-white hover:border-cyan-400/40"
+                ? "bg-amber-500/20 border-amber-400/50 text-amber-300"
+                : "bg-[#0d131f] border-white/10 text-slate-200 hover:border-amber-400/40 hover:text-amber-300"
             }`}
             title="Split this expense with friends"
           >
-            <Split className="w-3 h-3 text-cyan-400" />
+            <Split className="w-3 h-3 text-[#e6c875]" />
             <span>Split</span>
           </button>
 
-          <span className="font-mono tabular-nums text-sm font-bold text-rose-400 whitespace-nowrap ml-0.5">
+          <span className="font-mono tabular-nums text-sm font-bold text-white whitespace-nowrap ml-0.5">
             −₹{expense.amount.toLocaleString("en-IN")}
           </span>
           <button
@@ -349,11 +352,57 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
             )}
           </div>
 
+          {/* Cyberpunk Group Split Bill Receipt Card with Embedded UPI QR */}
+          <div className="flex items-center justify-between pt-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                playQuickAddChirp();
+                setShowReceiptQr((prev) => !prev);
+              }}
+              className="text-[10px] font-mono font-bold text-cyan-300 hover:text-cyan-200 flex items-center gap-1 cursor-pointer"
+            >
+              <QrCode className="w-3 h-3 text-cyan-400" />
+              <span>
+                {showReceiptQr ? "Hide Group Split Receipt QR" : "Generate Group Split Bill"}
+              </span>
+            </button>
+            <span className="text-[10px] font-mono text-slate-400">
+              UPI: <strong className="text-cyan-300">{activeUpiId}</strong>
+            </span>
+          </div>
+
+          {showReceiptQr && (
+            <div className="p-3 rounded-2xl bg-[#05070c] border border-cyan-500/35 flex items-center justify-between gap-3 shadow-[0_0_20px_rgba(6,182,212,0.12)]">
+              <div className="space-y-1 min-w-0 flex-1">
+                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-cyan-400 block">
+                  ⚡ CYBERPUNK SPLIT RECEIPT
+                </span>
+                <p className="text-xs font-black text-white truncate">{expense.title}</p>
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                  <span className="px-1.5 py-0.5 rounded bg-[#0a0e17] border border-white/10 text-slate-300">
+                    Total: ₹{expense.amount.toLocaleString("en-IN")}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 font-bold">
+                    ₹{perPersonShare.toLocaleString("en-IN")} / person
+                  </span>
+                </div>
+                <p className="text-[10px] font-mono text-slate-400 truncate">
+                  Attendees: You + {splitCount - 1} Friends ({splitCount} total)
+                </p>
+              </div>
+              <div className="p-1.5 rounded-xl bg-white shrink-0 shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+                <QRCodeSVG value={upiDeepLink} size={64} level="M" includeMargin={false} />
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <a
               href={whatsappHref}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => playStarkPowerSurgeSwoosh()}
               className={`flex-1 h-8 rounded-xl font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-sm ${
                 roastMode
                   ? "bg-gradient-to-r from-amber-500 via-orange-500 to-emerald-500 hover:brightness-110 text-slate-950"
@@ -361,7 +410,7 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
               }`}
             >
               <Send className="w-3 h-3" />
-              <span>{roastMode ? "🔥 Send Savage Split on WhatsApp" : `WhatsApp Split (${activeUpiId})`}</span>
+              <span>Share Bill to WhatsApp Group</span>
             </a>
 
             <button
