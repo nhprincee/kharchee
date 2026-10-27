@@ -88,6 +88,27 @@ export function createInitialExpenses(): Expense[] {
       amount: 250,
       timestamp: daysAgoAt(4, 21, 0),
       paymentMode: "UPI",
+      type: "expense",
+    },
+    {
+      id: "inc-1",
+      title: "Monthly Salary Credit",
+      category: "Salary",
+      amount: 25000,
+      timestamp: daysAgoAt(5, 10, 30),
+      paymentMode: "UPI",
+      type: "income",
+      note: "Primary monthly payroll deposit",
+    },
+    {
+      id: "inc-2",
+      title: "UI Design Sprint Payout",
+      category: "Freelance",
+      amount: 4500,
+      timestamp: daysAgoAt(2, 15, 45),
+      paymentMode: "UPI",
+      type: "income",
+      note: "Client milestone invoice",
     },
   ];
 }

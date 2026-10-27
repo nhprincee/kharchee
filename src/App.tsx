@@ -101,6 +101,9 @@ const VALID_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Entertainment",
   "Bills",
   "Shopping",
+  "Salary",
+  "Freelance",
+  "Cashback",
 ];
 
 const VALID_PAYMENT_MODES: PaymentMode[] = ["UPI", "Cash", "Card"];
@@ -130,6 +133,13 @@ function isValidExpenseRecord(item: unknown): item is Expense {
   if (
     typeof exp.paymentMode !== "string" ||
     !VALID_PAYMENT_MODES.includes(exp.paymentMode as PaymentMode)
+  ) {
+    return false;
+  }
+  if (
+    exp.type !== undefined &&
+    exp.type !== "expense" &&
+    exp.type !== "income"
   ) {
     return false;
   }
@@ -227,6 +237,9 @@ export function App() {
   );
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addModalTab, setAddModalTab] = useState<"ocr" | "nfc" | "sms" | "manual">("ocr");
+  const [addModalType, setAddModalType] = useState<"expense" | "income">("expense");
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [isJarvisOpen, setIsJarvisOpen] = useState(false);
   const [isJarvisBooting, setIsJarvisBooting] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -583,15 +596,15 @@ export function App() {
     };
   }, [baseTheme, customThemeOverride]);
 
-  // Calculate Today's Spend
+  // Calculate Today's Spend (Expense records only)
   const todaySpent = useMemo(() => {
     const todayStr = now.toDateString();
     return expenses
-      .filter((e) => new Date(e.timestamp).toDateString() === todayStr)
+      .filter((e) => e.type !== "income" && new Date(e.timestamp).toDateString() === todayStr)
       .reduce((sum, e) => sum + e.amount, 0);
   }, [expenses, now]);
 
-  // Calculate Dynamic Discipline Streak
+  // Calculate Dynamic Discipline Streak (Expense records only)
   const streakDays = useMemo(() => {
     let streak = 0;
     for (let i = 0; i < 30; i++) {
@@ -599,7 +612,7 @@ export function App() {
       checkDate.setDate(now.getDate() - i);
       const dayStr = checkDate.toDateString();
       const dayTotal = expenses
-        .filter((e) => new Date(e.timestamp).toDateString() === dayStr)
+        .filter((e) => e.type !== "income" && new Date(e.timestamp).toDateString() === dayStr)
         .reduce((sum, e) => sum + e.amount, 0);
 
       if (dayTotal <= dailyLimit) {
@@ -632,7 +645,7 @@ export function App() {
   const recentExpenses = useMemo(() => {
     return [...expenses]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 5);
+      .slice(0, 6);
   }, [expenses]);
 
   const showToast = (message: string, deletedExpense?: Expense) => {
@@ -778,10 +791,13 @@ export function App() {
     amount: number;
     category: ExpenseCategory;
     paymentMode: PaymentMode;
+    type?: "expense" | "income";
     note?: string;
   }) => {
+    const txType = data.type === "income" ? "income" : "expense";
     const currentHour = new Date().getHours();
     const isMidnightCraving =
+      txType === "expense" &&
       (currentHour >= 22 || currentHour < 4) &&
       (data.category === "Food" || data.category === "Chai & Snacks");
 
@@ -793,15 +809,22 @@ export function App() {
     }
 
     const newExp: Expense = {
-      id: `exp-${Date.now()}`,
+      id: `${txType === "income" ? "inc" : "exp"}-${Date.now()}`,
       title: data.title,
       category: data.category,
       amount: data.amount,
       paymentMode: data.paymentMode,
+      type: txType,
       note: data.note,
       timestamp: new Date().toISOString(),
     };
     setExpenses((prev) => [newExp, ...prev]);
+
+    if (txType === "income") {
+      showToast(`Logged +₹${data.amount.toLocaleString("en-IN")} income (${data.title})`);
+      return;
+    }
+
     const nextToday = todaySpent + data.amount;
     checkAutoLockdown(nextToday);
     checkBudgetThresholdAlerts(todaySpent, nextToday);
@@ -810,8 +833,45 @@ export function App() {
         `🌙 Midnight Impulse Alert! Late-night ${data.category} (−₹${data.amount}) leaks daily budgets!`
       );
     } else {
-      showToast(`Logged ₹${data.amount} for ${data.title}`);
+      showToast(`Logged −₹${data.amount.toLocaleString("en-IN")} for ${data.title}`);
     }
+  };
+
+  const handleUpdateExpense = (updated: Expense) => {
+    playQuickAddChirp();
+    setExpenses((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    setEditingExpense(null);
+    showToast(
+      `Updated ${updated.title} (${
+        updated.type === "income" ? "+" : "−"
+      }₹${updated.amount.toLocaleString("en-IN")})`
+    );
+  };
+
+  const handleOpenAddExpenseModal = () => {
+    setEditingExpense(null);
+    setAddModalType("expense");
+    setAddModalTab("manual");
+    setIsAddModalOpen(true);
+  };
+
+  const handleOpenAddIncomeModal = () => {
+    setEditingExpense(null);
+    setAddModalType("income");
+    setAddModalTab("manual");
+    setIsAddModalOpen(true);
+  };
+
+  const handleOpenScanReceiptModal = () => {
+    setEditingExpense(null);
+    setAddModalType("expense");
+    setAddModalTab("ocr");
+    setIsAddModalOpen(true);
+  };
+
+  const handleEditTransaction = (expense: Expense) => {
+    setEditingExpense(expense);
+    setIsAddModalOpen(true);
   };
 
   const handleQuickAdd = (preset: QuickAddPreset) => {
@@ -838,6 +898,7 @@ export function App() {
       category: preset.category,
       amount: preset.amount,
       paymentMode: "UPI",
+      type: "expense",
       timestamp: new Date().toISOString(),
     };
     setExpenses((prev) => [newExp, ...prev]);
@@ -857,7 +918,10 @@ export function App() {
     const target = expenses.find((e) => e.id === id);
     if (!target) return;
     setExpenses((prev) => prev.filter((e) => e.id !== id));
-    showToast(`Deleted ${target.title} (−₹${target.amount})`, target);
+    showToast(
+      `Deleted ${target.title} (${target.type === "income" ? "+" : "−"}₹${target.amount})`,
+      target
+    );
   };
 
   const handleUndoDelete = () => {
@@ -1169,29 +1233,112 @@ export function App() {
   const navItems: Array<{
     id: TabId;
     label: string;
+    pageTitle: string;
     icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   }> = [
-    { id: "home", label: "Home", icon: Home },
-    { id: "history", label: "History", icon: History },
-    { id: "insights", label: "Insights", icon: PieChart },
-    { id: "khata", label: "Khata", icon: Users },
-    { id: "pro", label: "PRO", icon: Crown },
+    { id: "home", label: "Dashboard", pageTitle: "Dashboard Overview", icon: Home },
+    { id: "history", label: "Transactions", pageTitle: "Transaction Ledger", icon: History },
+    { id: "insights", label: "Analytics", pageTitle: "Analytics & Reports", icon: PieChart },
+    { id: "khata", label: "Khata", pageTitle: "Shared Khata Ledger", icon: Users },
+    { id: "pro", label: "PRO", pageTitle: "Kharchee PRO Vault", icon: Crown },
   ];
 
+  const currentPageTitle =
+    navItems.find((item) => item.id === activeTab)?.pageTitle || "Dashboard Overview";
+
   return (
-    <div className="min-h-screen bg-black flex justify-center items-start">
-      {/* 1. MOBILE-FIRST COMPACT CONTAINER */}
-      <div
-        className="w-full max-w-[430px] min-h-screen bg-[#090d16] sm:border-x border-[#1a2234] flex flex-col relative overflow-x-hidden"
-        style={{
-          backgroundColor: "#090d16",
-        }}
+    <div className="min-h-screen bg-[#070b14] text-slate-100 flex">
+      {/* DESKTOP SIDEBAR NAVIGATION (md+ SaaS Workspace Canvas) */}
+      <aside
+        aria-label="Sidebar Navigation"
+        className="hidden md:flex w-64 shrink-0 flex-col justify-between bg-[#080c14] border-r border-slate-800/90 p-4 sticky top-0 h-screen z-40"
       >
+        <div className="space-y-6">
+          {/* Brand Header */}
+          <div className="flex items-center gap-3 px-2 pt-1">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center font-display font-black text-indigo-300 text-sm">
+              ₹
+            </div>
+            <div>
+              <span className="font-display font-black text-sm tracking-[0.18em] text-white block">
+                KHARCHEE
+              </span>
+              <span className="text-[11px] text-slate-400">Personal Finance OS</span>
+            </div>
+          </div>
+
+          {/* Primary Navigation Links */}
+          <nav className="space-y-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = activeTab === item.id;
+              const isProTab = item.id === "pro";
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                    active
+                      ? isProTab
+                        ? "bg-amber-500/15 text-amber-300 border border-amber-500/40"
+                        : "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-400 hover:text-slate-100 hover:bg-slate-900/80 border border-transparent"
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Icon
+                      className={`w-4 h-4 ${
+                        isProTab
+                          ? "text-amber-400"
+                          : active
+                          ? "text-white"
+                          : "text-slate-400"
+                      }`}
+                    />
+                    <span>{item.label}</span>
+                  </span>
+                  {isProTab && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-400/20 border border-amber-400/40 text-[9px] font-mono font-bold text-amber-300">
+                      VIP
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Bottom Sidebar Actions: Quick Add & Jarvis AI Assistant */}
+        <div className="space-y-2.5 pt-4 border-t border-slate-800/80">
+          <button
+            type="button"
+            onClick={handleOpenAddExpenseModal}
+            className="w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <span>+ Add Transaction</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenJarvisWithBootSequence}
+            className="w-full py-2.5 px-3 rounded-xl bg-[#0c1220] hover:bg-slate-900 border border-slate-800 text-xs font-semibold text-indigo-300 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          >
+            <Zap className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Ask J.A.R.V.I.S. AI</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN RESPONSIVE VIEWPORT */}
+      <div className="flex-1 min-w-0 min-h-screen bg-[#070b14] flex flex-col relative overflow-x-hidden">
         <ThemeBackdrop theme={theme} />
 
-        {/* 2. AUTHENTIC LOGO & GAMIFIED STREAK HEADER */}
+        {/* TOP SAAS HEADER */}
         <Header
           currentThemeId={themeId}
+          currentPageTitle={currentPageTitle}
           streakCount={streakDays}
           userInitials="MS"
           vaultReady={expenses.length > 0 || todaySpent <= dailyLimit}
@@ -1217,60 +1364,38 @@ export function App() {
           onImportBackup={handleImportBackup}
         />
 
-        {/* Sleek Single-Row Horizontal Slide Tray with Monochrome Glass Badges */}
-        <div
-          style={{
-            backgroundColor: "#000000",
-            backgroundImage: "none",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
-            boxShadow: "none",
-          }}
-          className="px-4 py-2.5 !bg-black !bg-none !shadow-none flex items-center justify-between gap-2 shrink-0 relative z-30"
-        >
+        {/* Contextual Utility Bar */}
+        <div className="px-4 sm:px-6 py-2 bg-[#080c14] border-b border-slate-800/80 flex items-center justify-between gap-2 shrink-0 relative z-30">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar whitespace-nowrap pr-1">
-            {/* Live date badge */}
-            <div className="inline-flex items-center px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] font-medium text-white/70 font-mono shrink-0">
+            <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-[11px] font-medium text-slate-300 font-mono shrink-0">
               {formatLiveHeaderDate(now)}
             </div>
-
-            {/* Monochrome Glass Utility Slide Tray */}
-            <button
-              type="button"
-              onClick={() => setIsRewardVaultOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors text-[10px] font-medium font-mono shrink-0 cursor-pointer"
-              title="Open Reward Vault"
-            >
-              <span className="text-white/90">✦</span>
-              <span>Vault</span>
-            </button>
 
             <button
               type="button"
               onClick={() => void checkClipboardForTransactions(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors text-[10px] font-medium font-mono shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
               title="Paste Bank SMS"
             >
-              <span className="text-white/90">⌘</span>
-              <span>Paste SMS</span>
+              <span>Paste Bank SMS</span>
             </button>
 
             <button
               type="button"
               onClick={handleTriggerFakeMomCall}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors text-[10px] font-medium font-mono shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
               title="Bail Me Out (Simulated Call)"
             >
-              <PhoneIncoming className="w-2.5 h-2.5 text-white/80" />
+              <PhoneIncoming className="w-3 h-3 text-indigo-400" />
               <span>Bail Out</span>
             </button>
 
             <button
               type="button"
               onClick={() => triggerStarkMorningBriefing(dailyLimit)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors text-[10px] font-medium font-mono shrink-0 cursor-pointer"
-              title="Morning Briefing"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
+              title="Morning Audio Briefing"
             >
-              <span className="text-white/90">◉</span>
               <span>Briefing</span>
             </button>
           </div>
@@ -1279,7 +1404,7 @@ export function App() {
             <button
               type="button"
               onClick={() => setIsProTeaserOpen(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#e6c875]/15 border border-[#e6c875]/40 text-[#e6c875] hover:bg-[#e6c875]/25 font-semibold text-[10px] font-mono tracking-tight transition-colors cursor-pointer shrink-0"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 font-semibold text-[11px] font-mono tracking-tight transition-colors cursor-pointer shrink-0"
               title="Unlock Kharche PRO Black"
             >
               <span>★ PRO Black</span>
@@ -1288,7 +1413,7 @@ export function App() {
             <button
               type="button"
               onClick={() => setActiveTab("pro")}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#e6c875]/15 border border-[#e6c875]/40 text-[#e6c875] hover:bg-[#e6c875]/25 font-semibold text-[10px] font-mono tracking-tight cursor-pointer transition-colors shrink-0"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 font-semibold text-[11px] font-mono tracking-tight cursor-pointer transition-colors shrink-0"
               title="PRO Active Member"
             >
               <span>★ PRO Black</span>
@@ -1302,11 +1427,11 @@ export function App() {
             role="status"
             aria-label="Stark Morning Telemetry Briefing"
             onClick={() => setIsMorningBriefingOpen(false)}
-            className="mx-4 my-2 p-3.5 rounded-2xl border border-cyan-400/60 bg-[#0a0e17]/95 backdrop-blur-2xl shadow-[0_0_35px_rgba(34,211,238,0.45)] relative z-40 animate-in fade-in slide-in-from-top-3 duration-300 cursor-pointer overflow-hidden"
+            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/50 bg-[#0c1220] shadow-xl relative z-40 animate-in fade-in slide-in-from-top-3 duration-300 cursor-pointer overflow-hidden"
           >
             <div className="flex items-start justify-between gap-2.5">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)] shrink-0 bg-black flex items-center justify-center">
+                <div className="w-9 h-9 rounded-full overflow-hidden border border-indigo-400 shrink-0 bg-black flex items-center justify-center">
                   <img
                     src="/assets/aistudio/image_34394344.png"
                     alt="J.A.R.V.I.S."
@@ -1315,17 +1440,17 @@ export function App() {
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                    <span className="text-[10px] font-mono font-black uppercase tracking-widest text-cyan-300">
-                      STARK MORNING BRIEFING · HUD SYNC
+                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-indigo-300">
+                      DAILY FINANCIAL BRIEFING
                     </span>
                   </div>
-                  <p className="text-xs font-medium text-cyan-50 mt-1 leading-relaxed">
-                    &ldquo;Good morning, Sir. Systems synchronized. Daily limit calibrated to{" "}
-                    <span className="font-mono font-black text-emerald-400">
+                  <p className="text-xs font-medium text-slate-200 mt-1 leading-relaxed">
+                    &ldquo;Good morning. Systems synchronized. Daily limit calibrated to{" "}
+                    <span className="font-mono font-bold text-emerald-400">
                       ₹{dailyLimit.toLocaleString("en-IN")}
                     </span>
-                    . Let&apos;s maintain operational discipline today.&rdquo;
+                    . Maintain operational discipline today.&rdquo;
                   </p>
                 </div>
               </div>
@@ -1336,7 +1461,7 @@ export function App() {
                   setIsMorningBriefingOpen(false);
                 }}
                 aria-label="Dismiss Morning Briefing"
-                className="w-6 h-6 rounded-full bg-slate-900 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center shrink-0"
+                className="w-6 h-6 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center shrink-0"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -1349,29 +1474,19 @@ export function App() {
           <aside
             role="alert"
             aria-label="Detected Banking Transaction"
-            className="mx-4 my-2 p-3.5 rounded-2xl border border-white/10 bg-[#0a0e17] backdrop-blur-xl shadow-2xl relative z-30 animate-in slide-in-from-top-2 duration-300"
-            style={{
-              borderColor: `${theme.accentHex}70`,
-              boxShadow: `0 8px 30px rgba(0,0,0,0.8), 0 0 25px ${theme.ringGlow}`,
-            }}
+            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/40 bg-[#0c1220] shadow-xl relative z-30 animate-in slide-in-from-top-2 duration-300"
           >
             <div className="flex items-start justify-between gap-2.5">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-slate-950 shrink-0 shadow-sm"
-                  style={{ background: theme.accentHex }}
-                >
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-white shrink-0">
                   <Zap className="w-4 h-4 fill-current" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span
-                      className="text-[10px] font-black uppercase tracking-wider"
-                      style={{ color: theme.accentHex }}
-                    >
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">
                       Bank SMS Detected
                     </span>
-                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-[#05070c] border border-white/10 text-slate-400">
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-slate-900 border border-slate-800 text-slate-400">
                       {detectedTxn.category} · {detectedTxn.paymentMode}
                     </span>
                   </div>
@@ -1389,7 +1504,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => setDetectedTxn(null)}
-                className="w-6 h-6 rounded-full bg-[#05070c] border border-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer shrink-0 transition-colors"
+                className="w-6 h-6 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer shrink-0 transition-colors"
                 aria-label="Dismiss detected transaction"
               >
                 <X className="w-3.5 h-3.5" />
@@ -1409,7 +1524,7 @@ export function App() {
                   });
                   setDetectedTxn(null);
                 }}
-                className={`flex-1 h-9 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all shadow-md ${theme.buttonBg} ${theme.buttonText}`}
+                className="flex-1 h-9 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center gap-1.5 cursor-pointer transition-all"
               >
                 <Zap className="w-3.5 h-3.5 fill-current" />
                 <span>Confirm &amp; Add</span>
@@ -1417,7 +1532,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => setDetectedTxn(null)}
-                className="px-3.5 h-9 rounded-xl bg-[#05070c] hover:bg-white/5 border border-white/10 text-xs font-bold text-slate-400 hover:text-slate-200 cursor-pointer transition-colors"
+                className="px-3.5 h-9 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-400 hover:text-slate-200 cursor-pointer transition-colors"
               >
                 Dismiss
               </button>
@@ -1425,19 +1540,17 @@ export function App() {
           </aside>
         )}
 
-        {/* Scrollable Body Content — Dark Obsidian Minimalism with generous space-y-6 padding */}
-        <div
-          style={{ backgroundColor: "#090d16" }}
-          className="flex-1 overflow-y-auto bg-[#090d16] px-4 py-4 space-y-6 pb-28 relative z-10"
-        >
+        {/* Scrollable Body Content — Responsive SaaS Container */}
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 pb-28 md:pb-12 relative z-10 max-w-5xl w-full mx-auto space-y-6">
           {activeTab === "home" && (
             <div className="space-y-6">
-              {/* AESTHETIC HERO CARD + QUICK ADD */}
+              {/* FINANCIAL SUMMARY CARDS + QUICK ACTIONS + SPENDING CHARTS */}
               <BudgetWidget
                 dailyLimit={dailyLimit}
                 todaySpent={todaySpent}
                 lockdownActive={lockdownActive}
                 theme={theme}
+                expenses={expenses}
                 streakDays={streakDays}
                 stealthMode={stealthMode}
                 onUpdateLimit={setDailyLimit}
@@ -1451,22 +1564,96 @@ export function App() {
                   setLockdownActive(next);
                   showToast(next ? "Emergency Lockdown active" : "Lockdown lifted");
                 }}
-                onOpenAddModal={() => setIsAddModalOpen(true)}
+                onOpenAddModal={handleOpenAddExpenseModal}
+                onOpenAddIncomeModal={handleOpenAddIncomeModal}
+                onOpenScanReceiptModal={handleOpenScanReceiptModal}
+                onNavigateTab={setActiveTab}
                 onQuickAdd={handleQuickAdd}
                 onTriggerCelebration={handleTriggerCelebration}
                 onTriggerFakeMomCall={handleTriggerFakeMomCall}
               />
 
-              {/* FAN-ZONE THEMES */}
-              <section id="tour-themes-bar" aria-label="Fan-Zone Themes" className="space-y-3">
+              {/* RECENT TRANSACTIONS ("Recent Transactions") */}
+              <section aria-label="Recent Transactions" className="space-y-3">
                 <div className="flex items-center justify-between px-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
-                    Fan-Zone Themes
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                      Recent Transactions
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Latest income and expense activity · Click edit or delete on any row
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("history")}
+                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 cursor-pointer transition-colors"
+                  >
+                    View All ({expenses.length}) →
+                  </button>
+                </div>
+
+                {recentExpenses.length === 0 ? (
+                  <div className="p-8 rounded-2xl border border-slate-800 bg-[#0c1220] text-center space-y-3">
+                    <p className="text-sm font-semibold text-slate-200">
+                      No transactions recorded yet
+                    </p>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                      Start tracking your cashflow by adding your first expense, logging an income inflow, or scanning a paper receipt.
+                    </p>
+                    <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleOpenAddExpenseModal}
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer transition-colors"
+                      >
+                        + Add Expense
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenAddIncomeModal}
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 cursor-pointer transition-colors"
+                      >
+                        + Add Income
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenScanReceiptModal}
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 cursor-pointer transition-colors"
+                      >
+                        Scan Receipt
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {recentExpenses.map((expense) => (
+                      <SwipeableExpenseRow
+                        key={expense.id}
+                        expense={expense}
+                        onDelete={handleDeleteExpense}
+                        onEdit={handleEditTransaction}
+                        myUpiId={myUpiId}
+                        showDate={
+                          new Date(expense.timestamp).toDateString() !==
+                          now.toDateString()
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* FAN-ZONE THEMES */}
+              <section id="tour-themes-bar" aria-label="Fan-Zone Themes" className="space-y-3 pt-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Accent &amp; Club Themes
                   </span>
                   <button
                     type="button"
                     onClick={() => setActiveTab("pro")}
-                    className="text-[10px] text-white/50 hover:text-white font-medium cursor-pointer transition-colors"
+                    className="text-xs text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer transition-colors"
                   >
                     Theme Studio →
                   </button>
@@ -1479,37 +1666,6 @@ export function App() {
                   }}
                 />
               </section>
-
-              {/* RECENT EXPENSES LIST ("Your Money, At A Glance") */}
-              <section aria-label="Recent Expenses" className="space-y-3">
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
-                    Your Money, At A Glance
-                  </span>
-                  <span className="text-[10px] text-white/40 font-mono tracking-tight">Swipe to delete</span>
-                </div>
-
-                {recentExpenses.length === 0 ? (
-                  <div className="p-6 rounded-2xl border border-white/[0.07] bg-white/[0.02] text-center">
-                    <p className="text-xs text-white/40">No expenses logged today yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {recentExpenses.map((expense) => (
-                      <SwipeableExpenseRow
-                        key={expense.id}
-                        expense={expense}
-                        onDelete={handleDeleteExpense}
-                        myUpiId={myUpiId}
-                        showDate={
-                          new Date(expense.timestamp).toDateString() !==
-                          now.toDateString()
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
             </div>
           )}
 
@@ -1518,7 +1674,9 @@ export function App() {
               expenses={expenses}
               theme={theme}
               onDeleteExpense={handleDeleteExpense}
-              onOpenAddModal={() => setIsAddModalOpen(true)}
+              onEditExpense={handleEditTransaction}
+              onOpenAddModal={handleOpenAddExpenseModal}
+              onOpenAddIncomeModal={handleOpenAddIncomeModal}
               onShowToast={showToast}
             />
           )}
@@ -1587,7 +1745,7 @@ export function App() {
               onShowToast={showToast}
             />
           )}
-        </div>
+        </main>
 
         {/* Floating 3D Iron Man Arc Reactor HUD Orb (64x64px) */}
         <button
@@ -1856,13 +2014,20 @@ export function App() {
           </div>
         )}
 
-        {/* Add Expense Bottom Sheet Modal */}
+        {/* Add / Edit Transaction Modal */}
         <AddExpenseModal
           isOpen={isAddModalOpen}
           lockdownActive={lockdownActive}
           theme={theme}
-          onClose={() => setIsAddModalOpen(false)}
+          initialTab={addModalTab}
+          initialType={addModalType}
+          editingExpense={editingExpense}
+          onClose={() => {
+            setIsAddModalOpen(false);
+            setEditingExpense(null);
+          }}
           onAddExpense={handleAddExpense}
+          onUpdateExpense={handleUpdateExpense}
         />
 
         {/* CRED-Style Profile Drawer */}
@@ -1948,25 +2113,21 @@ export function App() {
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              style={{
-                borderColor: `${theme.accentHex}50`,
-                boxShadow: `0 0 40px ${theme.ringGlow}`,
-              }}
-              className="w-full max-w-[398px] rounded-3xl border bg-[#0b0f17]/95 p-4 space-y-3 shadow-2xl"
+              className="w-full max-w-[420px] rounded-3xl border border-slate-800 bg-[#0b101d] p-5 space-y-3 shadow-2xl"
             >
               <div className="flex items-center justify-between px-1">
                 <div>
-                  <h3 className="text-sm font-black tracking-wider uppercase text-white">
-                    Select Active Armor / Club Crest
+                  <h3 className="text-sm font-bold tracking-wider uppercase text-white">
+                    Select Accent / Club Theme
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Tap any emblem to switch HUD telemetry theme
+                    Choose your preferred dashboard accent theme
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsThemeModalOpen(false)}
-                  className="w-7 h-7 rounded-full bg-slate-900 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+                  className="w-7 h-7 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1984,16 +2145,15 @@ export function App() {
           </div>
         )}
 
-        {/* Native Mobile Bottom Navigation Bar (5 Tabs) - Forcibly Isolated Fixed Pure Solid Black */}
+        {/* Mobile Bottom Navigation Bar (5 Tabs) - Shown on mobile/narrow viewports (<768px) */}
         <nav
-          aria-label="Navigation"
+          aria-label="Mobile Navigation"
           style={{
-            backgroundColor: "#000000",
+            backgroundColor: "#080c14",
             backgroundImage: "none",
-            borderTop: "1px solid #1a2234",
-            boxShadow: "0 -10px 25px rgba(0,0,0,0.8)",
+            borderTop: "1px solid #1e293b",
           }}
-          className="fixed bottom-0 left-0 right-0 z-50 max-w-[430px] mx-auto h-16 !bg-black !bg-none !backdrop-blur-none px-2 flex items-center justify-around shrink-0"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-50 h-16 bg-[#080c14] px-2 flex items-center justify-around shrink-0"
         >
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -2006,29 +2166,25 @@ export function App() {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex flex-col items-center justify-center flex-1 py-1.5 rounded-2xl mx-0.5 transition-colors cursor-pointer relative ${
+                  className={`flex flex-col items-center justify-center flex-1 py-1.5 rounded-xl mx-0.5 transition-colors cursor-pointer relative ${
                     active
-                      ? "bg-[#0a0e17] border border-amber-400/50"
-                      : "bg-transparent hover:bg-[#0a0e17] border border-transparent"
+                      ? "bg-amber-500/15 border border-amber-400/50"
+                      : "bg-transparent hover:bg-slate-900 border border-transparent"
                   }`}
                 >
-                  {/* Micro "VIP" Gold Pill Badge Above the Crown */}
                   <span className="absolute -top-2 px-1.5 py-[1px] rounded-full bg-amber-400 text-black font-mono text-[8px] font-black uppercase tracking-wider leading-tight whitespace-nowrap">
                     ★ VIP
                   </span>
 
                   <div className="relative flex flex-col items-center mt-1">
                     <Crown
-                      className="w-5 h-5 text-amber-400 transition-transform duration-200"
+                      className="w-4 h-4 text-amber-400 transition-transform duration-200"
                       style={{
                         fill: active ? "rgba(251, 191, 36, 0.35)" : "rgba(251, 191, 36, 0.15)",
                       }}
                     />
-                    {active && (
-                      <span className="w-1.5 h-1.5 rounded-full mt-0.5 bg-amber-400" />
-                    )}
                   </div>
-                  <span className="text-[10px] font-black tracking-wider text-amber-400">
+                  <span className="text-[10px] font-bold tracking-wider text-amber-400 mt-0.5">
                     {item.label}
                   </span>
                 </button>
@@ -2040,26 +2196,23 @@ export function App() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`flex flex-col items-center justify-center flex-1 py-1.5 rounded-2xl mx-0.5 transition-colors cursor-pointer relative ${
+                className={`flex flex-col items-center justify-center flex-1 py-1.5 rounded-xl mx-0.5 transition-colors cursor-pointer relative ${
                   active
-                    ? "text-cyan-300 bg-[#0a0e17] border border-[#1a2234]"
+                    ? "text-indigo-300 bg-indigo-500/15 border border-indigo-500/35"
                     : "text-slate-400 hover:text-slate-200 border border-transparent"
                 }`}
               >
                 <div className="relative flex flex-col items-center">
                   <Icon
-                    className="w-5 h-5 transition-transform duration-200"
-                    style={{
-                      color: active ? "#22d3ee" : undefined,
-                    }}
+                    className={`w-4 h-4 transition-transform duration-200 ${
+                      active ? "text-indigo-400" : ""
+                    }`}
                   />
-                  {active && (
-                    <span className="w-1.5 h-1.5 rounded-full mt-0.5 bg-cyan-400" />
-                  )}
                 </div>
                 <span
-                  className="text-[10px] font-bold tracking-tight transition-colors"
-                  style={{ color: active ? "#67e8f9" : undefined }}
+                  className={`text-[10px] font-semibold tracking-tight mt-0.5 transition-colors ${
+                    active ? "text-indigo-200" : ""
+                  }`}
                 >
                   {item.label}
                 </span>

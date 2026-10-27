@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Lock,
   Unlock,
@@ -6,19 +6,21 @@ import {
   Pencil,
   Check,
   X,
-  AlertTriangle,
-  Shield,
-  PartyPopper,
-  Sparkles,
   Timer,
-  PhoneIncoming,
-  EyeOff,
-  Flame,
   Volume2,
-  Zap,
+  Camera,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Wallet,
+  TrendingUp,
+  PiggyBank,
+  Users,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from "lucide-react";
-import type { FanTheme, QuickAddPreset } from "../types";
+import type { Expense, ExpenseCategory, FanTheme, QuickAddPreset, TabId } from "../types";
 import { QUICK_ADD_PRESETS } from "../data/initialData";
+import { getCategoryIcon } from "./SwipeableExpenseRow";
 import {
   playMechanicalKeyTick,
   playStarkPowerSurgeSwoosh,
@@ -30,20 +32,36 @@ interface BudgetWidgetProps {
   todaySpent: number;
   lockdownActive: boolean;
   theme: FanTheme;
+  expenses?: Expense[];
   streakDays?: number;
   stealthMode?: boolean;
   onUpdateLimit: (newLimit: number) => void;
   onToggleLockdown: () => void;
   onOpenAddModal: () => void;
+  onOpenAddIncomeModal?: () => void;
+  onOpenScanReceiptModal?: () => void;
+  onNavigateTab?: (tab: TabId) => void;
   onQuickAdd: (preset: QuickAddPreset) => void;
   onTriggerCelebration?: (type: "streak" | "shield") => void;
   onTriggerFakeMomCall?: () => void;
 }
 
+const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
+  Food: "#6366f1",
+  "Chai & Snacks": "#f59e0b",
+  Transport: "#38bdf8",
+  Grocery: "#10b981",
+  Entertainment: "#a855f7",
+  Bills: "#f43f5e",
+  Shopping: "#ec4899",
+  Salary: "#10b981",
+  Freelance: "#34d399",
+  Cashback: "#2dd4bf",
+};
+
 function getNextMorningCooldown(): string {
   const now = new Date();
   const nextMorning = new Date(now);
-  // Target 6:00 AM next morning (or 6:00 AM today if currently between midnight and 6 AM)
   if (now.getHours() >= 6) {
     nextMorning.setDate(now.getDate() + 1);
   }
@@ -61,21 +79,21 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
   dailyLimit,
   todaySpent,
   lockdownActive,
-  theme,
-  streakDays = 0,
+  expenses = [],
   stealthMode = false,
   onUpdateLimit,
   onToggleLockdown,
   onOpenAddModal,
+  onOpenAddIncomeModal,
+  onOpenScanReceiptModal,
+  onNavigateTab,
   onQuickAdd,
   onTriggerCelebration,
-  onTriggerFakeMomCall,
 }) => {
   const [isEditingLimit, setIsEditingLimit] = useState(false);
   const [limitInput, setLimitInput] = useState(String(dailyLimit));
   const [cooldownStr, setCooldownStr] = useState<string>(() => getNextMorningCooldown());
 
-  // "Salary Day vs Month-End" Survival Meter state (defaults to actual calendar date)
   const nowDate = new Date();
   const realDayOfMonth = nowDate.getDate();
   const totalDaysInMonth = new Date(
@@ -84,7 +102,6 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
     0
   ).getDate();
   const [simulatedPhase, setSimulatedPhase] = useState<"auto" | "optimal" | "month-end">("auto");
-  const [simulateHazardBreach, setSimulateHazardBreach] = useState(false);
 
   const isMonthEndPhase =
     simulatedPhase === "month-end"
@@ -111,25 +128,108 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
     return () => clearInterval(interval);
   }, [lockdownActive]);
 
+  // Financial Metrics derived strictly from real user records
+  const financialTotals = useMemo(() => {
+    const totalIncome = expenses
+      .filter((e) => e.type === "income")
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    const totalExpenses = expenses
+      .filter((e) => e.type !== "income")
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    const netBalance = totalIncome - totalExpenses;
+    const monthlyBudget = dailyLimit * 30;
+    const remainingMonthlyBudget = monthlyBudget - totalExpenses;
+
+    return {
+      totalIncome,
+      totalExpenses,
+      netBalance,
+      monthlyBudget,
+      remainingMonthlyBudget,
+      incomeCount: expenses.filter((e) => e.type === "income").length,
+      expenseCount: expenses.filter((e) => e.type !== "income").length,
+    };
+  }, [expenses, dailyLimit]);
+
+  // Monthly Income vs Expense Chart Data (Last 4 Weekly Buckets in Current Month + Summary)
+  const cashflowChartData = useMemo(() => {
+    const buckets: Array<{
+      label: string;
+      dateRange: string;
+      income: number;
+      expense: number;
+    }> = [];
+    const now = new Date();
+
+    for (let w = 3; w >= 0; w--) {
+      const end = new Date(now);
+      end.setDate(now.getDate() - w * 7);
+      end.setHours(23, 59, 59, 999);
+
+      const start = new Date(end);
+      start.setDate(end.getDate() - 6);
+      start.setHours(0, 0, 0, 0);
+
+      let inc = 0;
+      let exp = 0;
+      for (const item of expenses) {
+        const ts = new Date(item.timestamp).getTime();
+        if (ts >= start.getTime() && ts <= end.getTime()) {
+          if (item.type === "income") inc += item.amount;
+          else exp += item.amount;
+        }
+      }
+
+      const startLabel = start.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      const endLabel = end.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
+      buckets.push({
+        label: w === 0 ? "This Week" : `W-${w}`,
+        dateRange: `${startLabel} – ${endLabel}`,
+        income: inc,
+        expense: exp,
+      });
+    }
+    return buckets;
+  }, [expenses]);
+
+  const maxChartVal = useMemo(() => {
+    const vals = cashflowChartData.flatMap((b) => [b.income, b.expense]);
+    return Math.max(1000, ...vals);
+  }, [cashflowChartData]);
+
+  // Category-Wise Spending Breakdown
+  const categoryBreakdown = useMemo(() => {
+    const expenseItems = expenses.filter((e) => e.type !== "income");
+    const totalOutflow = expenseItems.reduce((s, e) => s + e.amount, 0);
+    const map = new Map<ExpenseCategory, { amount: number; count: number }>();
+
+    for (const item of expenseItems) {
+      const prev = map.get(item.category) || { amount: 0, count: 0 };
+      map.set(item.category, { amount: prev.amount + item.amount, count: prev.count + 1 });
+    }
+
+    return Array.from(map.entries())
+      .map(([category, stats]) => ({
+        category,
+        amount: stats.amount,
+        count: stats.count,
+        percent: totalOutflow > 0 ? Math.round((stats.amount / totalOutflow) * 100) : 0,
+        color: CATEGORY_COLORS[category] || "#6366f1",
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [expenses]);
+
   const remaining = dailyLimit - todaySpent;
   const rawPercent = dailyLimit > 0 ? Math.round((todaySpent / dailyLimit) * 100) : 0;
   const clampedPercent = Math.min(100, Math.max(0, rawPercent));
   const isOverBudget = remaining < 0;
-  const isSafeBurnBreached = isOverBudget || simulateHazardBreach || rawPercent >= 100;
+  const isSafeBurnBreached = isOverBudget || rawPercent >= 100;
   const isShieldActive = dailyLimit > 0 && todaySpent <= dailyLimit * 0.5;
 
-  // Symmetrical SVG Ring Math
-  const size = 160;
-  const strokeWidth = 12;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (clampedPercent / 100) * circumference;
-
-  const monthName = nowDate.toLocaleString("en-US", { month: "long" }).toUpperCase();
-  const formattedHeroAmount = `₹${Math.abs(remaining).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  const monthName = nowDate.toLocaleString("en-IN", { month: "short", year: "numeric" });
 
   const handleSaveLimit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,50 +242,178 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* AESTHETIC HERO CARD (APPLE CARD / LINEAR / CRED STYLE) */}
+      {/* 1. FINANCIAL SUMMARY CARDS (4-Card SaaS KPI Grid) */}
+      <section aria-label="Financial Summary Cards" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Card 1: Net Position / Total Balance */}
+        <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              Net Position
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center text-indigo-400">
+              <Wallet className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p className="font-mono tabular-nums text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              {stealthMode
+                ? "₹0"
+                : `${financialTotals.netBalance >= 0 ? "+" : "−"}₹${Math.abs(
+                    financialTotals.netBalance
+                  ).toLocaleString("en-IN")}`}
+            </p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span
+                className={`inline-flex items-center gap-0.5 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                  financialTotals.netBalance >= 0
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                    : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                }`}
+              >
+                {financialTotals.netBalance >= 0 ? "Surplus" : "Deficit"}
+              </span>
+              <span className="text-[11px] text-slate-400 truncate">Income − Spend</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Total Income */}
+        <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              Income
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
+              <ArrowDownLeft className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p className="font-mono tabular-nums text-xl sm:text-2xl font-extrabold text-emerald-400 tracking-tight">
+              {stealthMode ? "₹0" : `+₹${financialTotals.totalIncome.toLocaleString("en-IN")}`}
+            </p>
+            <div className="flex items-center justify-between gap-1 mt-1">
+              <span className="text-[11px] text-slate-400 font-mono tabular-nums">
+                {financialTotals.incomeCount} inflows
+              </span>
+              {onOpenAddIncomeModal && (
+                <button
+                  type="button"
+                  onClick={onOpenAddIncomeModal}
+                  className="text-[10px] font-semibold text-emerald-300 hover:text-emerald-200 underline cursor-pointer"
+                >
+                  + Add
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Total Expenses */}
+        <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              Expenses
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400">
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p className="font-mono tabular-nums text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              {stealthMode ? "₹0" : `−₹${financialTotals.totalExpenses.toLocaleString("en-IN")}`}
+            </p>
+            <div className="flex items-center justify-between gap-1 mt-1">
+              <span className="text-[11px] text-slate-400 font-mono tabular-nums truncate">
+                Today: ₹{stealthMode ? "0" : todaySpent.toLocaleString("en-IN")}
+              </span>
+              <span className="text-[10px] font-mono text-slate-500">
+                {financialTotals.expenseCount} txns
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Savings / Remaining Daily Budget */}
+        <div
+          id="tour-budget-ring"
+          className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              Daily Budget Left
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-violet-400">
+              <PiggyBank className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <p
+              className={`font-mono tabular-nums text-xl sm:text-2xl font-extrabold tracking-tight ${
+                isOverBudget ? "text-rose-400" : "text-white"
+              }`}
+            >
+              {stealthMode
+                ? "₹0"
+                : `${isOverBudget ? "−" : ""}₹${Math.abs(remaining).toLocaleString("en-IN")}`}
+            </p>
+            <div className="flex items-center justify-between gap-1 mt-1">
+              <span className="text-[11px] text-slate-400 font-mono tabular-nums">
+                {stealthMode ? "Stealth" : `${rawPercent}% of ₹${dailyLimit}`}
+              </span>
+              {!isEditingLimit ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLimitInput(String(dailyLimit));
+                    setIsEditingLimit(true);
+                  }}
+                  className="text-[10px] font-semibold text-indigo-300 hover:text-indigo-200 flex items-center gap-0.5 cursor-pointer"
+                  title="Edit daily budget limit"
+                >
+                  <Pencil className="w-2.5 h-2.5" />
+                  <span>Edit</span>
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Inline Daily Budget Limit Editor & Progress Bar Card */}
       <section
-        id="tour-budget-ring"
-        aria-label="Today's Budget"
-        className="bg-gradient-to-b from-[#111622]/80 to-[#080c14]/90 backdrop-blur-3xl border border-white/[0.07] rounded-3xl p-6 transition-all duration-300 relative overflow-hidden"
+        aria-label="Daily Budget Runway"
+        className="rounded-2xl bg-[#0c1220] border border-slate-800/90 p-4 space-y-3"
       >
-        {/* Top Row: Tracked Mini Label & Edit Limit Trigger */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
-              {monthName} RUNWAY
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isSafeBurnBreached
+                  ? "bg-rose-400 animate-ping"
+                  : isMonthEndPhase
+                  ? "bg-amber-400"
+                  : "bg-emerald-400"
+              }`}
+            />
+            <span className="text-xs font-semibold text-slate-200">
+              {monthName} Daily Budget Progress
             </span>
             {lockdownActive && (
-              <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-[#e6c875] bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/40 text-amber-300">
                 Locked
               </span>
             )}
             {isOverBudget && (
-              <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-rose-300 bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 rounded-full">
-                Deficit
+              <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-300">
+                Over Limit
               </span>
             )}
           </div>
 
-          {!isEditingLimit ? (
-            <button
-              type="button"
-              onClick={() => {
-                setLimitInput(String(dailyLimit));
-                setIsEditingLimit(true);
-              }}
-              className="text-[11px] font-medium text-white/60 hover:text-white flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] transition-colors cursor-pointer"
-            >
-              <Pencil className="w-2.5 h-2.5 text-white/60" />
-              <span className="tracking-tight">
-                {stealthMode
-                  ? "₹0.00"
-                  : `Limit ₹${dailyLimit.toLocaleString("en-IN")}`}
-              </span>
-            </button>
-          ) : (
-            <form onSubmit={handleSaveLimit} className="flex items-center gap-1">
+          {isEditingLimit ? (
+            <form onSubmit={handleSaveLimit} className="flex items-center gap-1.5">
               <div className="relative flex items-center">
-                <span className="absolute left-2 text-xs font-mono text-white/50">₹</span>
+                <span className="absolute left-2 text-xs font-mono text-slate-400">₹</span>
                 <input
                   type="number"
                   min={50}
@@ -197,253 +425,409 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
                     setLimitInput(e.target.value);
                   }}
                   autoFocus
-                  className="w-20 h-7 pl-5 pr-1 rounded-lg bg-black/60 border border-white/15 text-xs font-mono tabular-nums text-white focus:outline-none focus:border-[#e6c875]"
+                  className="w-24 h-7 pl-5 pr-2 rounded-lg bg-slate-950 border border-indigo-500/50 text-xs font-mono tabular-nums text-white focus:outline-none"
                 />
               </div>
               <button
                 type="submit"
                 aria-label="Save limit"
-                className="w-6 h-6 rounded-md bg-white text-black flex items-center justify-center cursor-pointer"
+                className="px-2 h-7 rounded-lg bg-indigo-600 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
+                <span>Save</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsEditingLimit(false)}
                 aria-label="Cancel editing"
-                className="w-6 h-6 rounded-md bg-white/[0.06] text-white/70 flex items-center justify-center cursor-pointer"
+                className="w-7 h-7 rounded-lg bg-slate-800 text-slate-300 flex items-center justify-center cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </form>
+          ) : (
+            <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-slate-400">
+              <span>
+                Spent{" "}
+                <strong className="text-slate-100">
+                  ₹{stealthMode ? "0" : todaySpent.toLocaleString("en-IN")}
+                </strong>{" "}
+                / ₹{stealthMode ? "0" : dailyLimit.toLocaleString("en-IN")}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  playMechanicalKeyTick();
+                  setSimulatedPhase((prev) =>
+                    prev === "auto"
+                      ? isMonthEndPhase
+                        ? "optimal"
+                        : "month-end"
+                      : prev === "optimal"
+                      ? "month-end"
+                      : "auto"
+                  );
+                }}
+                className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-400 hover:text-white cursor-pointer"
+              >
+                Day {activeDayDisplay} · {daysUntilFirst}d left
+              </button>
+              {isShieldActive && (
+                <button
+                  type="button"
+                  onClick={() => onTriggerCelebration?.("shield")}
+                  className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-300 hover:bg-emerald-500/20 cursor-pointer"
+                >
+                  Shield ≤50%
+                </button>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Giant Crisp White Hero Number */}
-        <div className="mt-5 mb-5">
-          <div className="flex items-baseline justify-between gap-2">
-            <h2 className="font-mono tabular-nums text-4xl sm:text-5xl font-black tracking-tight text-white">
-              {stealthMode
-                ? "₹0.00"
-                : isOverBudget
-                ? `−${formattedHeroAmount}`
-                : formattedHeroAmount}
-            </h2>
-            <span className="font-mono tabular-nums text-xs font-medium tracking-tight text-white/50">
-              {stealthMode ? "STEALTH" : `${rawPercent}% used`}
-            </span>
-          </div>
-          <p className="text-xs text-white/50 tracking-tight mt-1.5 font-mono tabular-nums">
-            {stealthMode
-              ? "Zero-Balance Shield Engaged · Balances Hidden"
-              : `Spent ₹${todaySpent.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })} of ₹${dailyLimit.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })} daily allowance`}
-          </p>
-        </div>
-
-        {/* Thin Minimalist 3px Progress Line with Subtle Champagne-Gold Glow */}
         <div
           role="img"
           aria-label={`${rawPercent} percent of daily budget used`}
-          className="w-full h-[3px] rounded-full bg-white/[0.07] overflow-hidden relative"
+          className="w-full h-2 rounded-full bg-slate-900 overflow-hidden"
         >
           <div
             className="h-full rounded-full transition-all duration-500 ease-out"
             style={{
               width: `${Math.max(2, clampedPercent)}%`,
-              backgroundColor: isOverBudget ? "#f43f5e" : "#e6c875",
-              boxShadow: isOverBudget
-                ? "0 0 10px rgba(244, 63, 94, 0.5)"
-                : "0 0 10px rgba(230, 200, 117, 0.45)",
+              backgroundColor: isOverBudget
+                ? "#f43f5e"
+                : rawPercent >= 80
+                ? "#f59e0b"
+                : "#6366f1",
             }}
           />
         </div>
 
-        {/* Subtle Minimalist Runway Telemetry Strip */}
-        <div className="mt-5 pt-4 border-t border-white/[0.06] flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isSafeBurnBreached
-                  ? "bg-rose-400 animate-ping"
-                  : isMonthEndPhase
-                  ? "bg-[#e6c875]"
-                  : "bg-emerald-400"
-              }`}
-            />
-            <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-white/70">
-              {isMonthEndPhase
-                ? "Critical Oxygen / Broke Alert"
-                : "Stark Vault: Optimal Runway"}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                playMechanicalKeyTick();
-                setSimulatedPhase((prev) =>
-                  prev === "auto"
-                    ? isMonthEndPhase
-                      ? "optimal"
-                      : "month-end"
-                    : prev === "optimal"
-                    ? "month-end"
-                    : "auto"
-                );
-              }}
-              className="px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono text-white/60 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
-            >
-              Day {activeDayDisplay} · {daysUntilFirst}d to 1st
-            </button>
-            {isShieldActive && (
-              <button
-                type="button"
-                onClick={() => onTriggerCelebration?.("shield")}
-                className="px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono text-[#e6c875] hover:bg-white/[0.08] transition-colors cursor-pointer"
-                title="Celebrate Discipline Shield"
-              >
-                Shield 50%
-              </button>
-            )}
-          </div>
-        </div>
-
-        <p className="text-[11px] font-mono text-white/50 mt-2 tracking-tight">
-          Remaining Daily Quota:{" "}
-          <span className="text-white font-semibold">
-            ₹{dailyLimit.toLocaleString("en-IN")}
-          </span>{" "}
-          to survive until the 1st.
-        </p>
-
-        {/* Emergency Lockdown Overlay (Minimalist Dark Glass) */}
         {lockdownActive && (
           <div
             role="region"
             aria-label="Emergency Lockdown HUD Overlay"
-            className="mt-4 w-full rounded-2xl border border-white/[0.08] bg-black/50 p-3.5 text-left"
+            className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 flex items-center justify-between gap-3 flex-wrap"
           >
-            <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.06]">
-              <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.2em] text-[#e6c875]">
-                Lockdown Protocol
+            <div>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-300 block">
+                Emergency Budget Lockdown Active
               </span>
-              <div className="inline-flex items-center gap-1 font-mono text-[11px] text-white/80 tabular-nums">
-                <Timer className="w-3 h-3 text-[#e6c875]" />
-                <span>{cooldownStr}</span>
-              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Discretionary spending paused until <span className="text-white font-semibold">06:00 AM</span>.
+              </p>
             </div>
-            <p className="text-[11px] text-white/60 mt-2 leading-relaxed">
-              Outgoing discretionary UPI transfers paused until{" "}
-              <span className="text-white font-medium">06:00 AM</span>.
-            </p>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-amber-500/30 font-mono text-xs text-amber-300 tabular-nums">
+              <Timer className="w-3.5 h-3.5" />
+              <span>{cooldownStr}</span>
+            </div>
           </div>
         )}
       </section>
 
-      {/* DUAL ACTION CONTROLS — SLEEK FROSTED GLASS & REFINED CHAMPAGNE */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          onClick={onToggleLockdown}
-          className={`min-h-[46px] px-4 py-2.5 rounded-2xl font-medium text-xs flex items-center justify-center gap-2 border transition-all active:scale-[0.98] cursor-pointer ${
-            lockdownActive
-              ? "bg-white/[0.08] border-[#e6c875]/40 text-[#e6c875]"
-              : "bg-white/[0.04] border-white/[0.08] text-white/80 hover:bg-white/[0.08] hover:text-white"
-          }`}
-        >
-          {lockdownActive ? (
-            <>
-              <Unlock className="w-3.5 h-3.5 text-[#e6c875]" />
-              <span>Lift Lockdown</span>
-            </>
-          ) : (
-            <>
-              <Lock className="w-3.5 h-3.5 text-white/70" />
-              <span>Lockdown Mode</span>
-            </>
+      {/* 2. QUICK ACTIONS BAR (Add Expense, Add Income, Scan Receipt, Split Khata, Lockdown) */}
+      <section aria-label="Quick Actions" className="space-y-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          <button
+            type="button"
+            onClick={onOpenAddModal}
+            className="min-h-[44px] px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white transition-colors cursor-pointer shadow-sm"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>Add Expense</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenAddIncomeModal || onOpenAddModal}
+            className="min-h-[44px] px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-500/35 text-emerald-300 transition-colors cursor-pointer"
+          >
+            <ArrowDownLeft className="w-4 h-4" />
+            <span>Add Income</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenScanReceiptModal || onOpenAddModal}
+            className="min-h-[44px] px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 bg-[#0c1220] hover:bg-[#131c31] border border-slate-800 text-slate-200 transition-colors cursor-pointer"
+          >
+            <Camera className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Scan Receipt</span>
+          </button>
+
+          {onNavigateTab && (
+            <button
+              type="button"
+              onClick={() => onNavigateTab("khata")}
+              className="min-h-[44px] px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 bg-[#0c1220] hover:bg-[#131c31] border border-slate-800 text-slate-200 transition-colors cursor-pointer"
+            >
+              <Users className="w-3.5 h-3.5 text-violet-400" />
+              <span>Split Khata</span>
+            </button>
           )}
-        </button>
 
-        <button
-          type="button"
-          onClick={onOpenAddModal}
-          className="min-h-[46px] px-4 py-2.5 rounded-2xl font-semibold text-xs flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all cursor-pointer bg-white text-black hover:bg-white/90"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>Add Expense</span>
-        </button>
-      </div>
-
-      {/* QUICK-ADD CHIPS — MINIMALIST DARK OBSIDIAN GLASS */}
-      <div id="tour-quick-add" className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
-            Quick Add
-          </span>
-          <span className="text-[10px] text-white/40 font-mono tracking-tight">1-Tap Log</span>
+          <button
+            type="button"
+            onClick={onToggleLockdown}
+            className={`min-h-[44px] px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 border transition-colors cursor-pointer col-span-2 sm:col-span-1 ${
+              lockdownActive
+                ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                : "bg-[#0c1220] hover:bg-[#131c31] border-slate-800 text-slate-300"
+            }`}
+          >
+            {lockdownActive ? (
+              <>
+                <Unlock className="w-3.5 h-3.5 text-amber-400" />
+                <span>Lift Lockdown</span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                <span>Lockdown</span>
+              </>
+            )}
+          </button>
         </div>
 
-        <div className="grid grid-cols-4 gap-2.5">
-          {QUICK_ADD_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => onQuickAdd(preset)}
-              className="min-h-[54px] p-2.5 rounded-2xl border border-white/[0.07] bg-white/[0.03] hover:bg-white/[0.07] active:scale-[0.97] transition-all flex flex-col items-center justify-center text-center cursor-pointer"
-            >
-              <div className="flex items-center gap-1">
-                <span className="text-xs" aria-hidden="true">
-                  {preset.emoji}
-                </span>
-                <span className="text-[11px] font-medium text-white/85">
-                  {preset.label}
-                </span>
-              </div>
-              <span className="font-mono tabular-nums text-[11px] font-semibold tracking-tight text-white/50 mt-0.5">
-                ₹{preset.amount}
-              </span>
-            </button>
-          ))}
-        </div>
+        {/* 1-Tap Preset Chips */}
+        <div id="tour-quick-add" className="pt-1">
+          <div className="flex items-center justify-between px-1 mb-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              1-Tap Instant Log
+            </span>
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-500">
+              <Volume2 className="w-3 h-3" />
+              <button
+                type="button"
+                onClick={() => playMechanicalKeyTick()}
+                className="hover:text-slate-300 cursor-pointer"
+              >
+                Tick
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={() => playStarkPowerSurgeSwoosh()}
+                className="hover:text-slate-300 cursor-pointer"
+              >
+                Swoosh
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={() => playMetallicCoinChime()}
+                className="hover:text-slate-300 cursor-pointer"
+              >
+                Chime
+              </button>
+            </div>
+          </div>
 
-        {/* Minimalist Acoustic Feedback Bar */}
-        <div className="pt-1 flex items-center justify-between gap-2 px-1">
-          <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/40 flex items-center gap-1.5">
-            <Volume2 className="w-3 h-3 text-white/50" />
-            <span>Tactile Synth</span>
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => playMechanicalKeyTick()}
-              className="px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white text-[10px] font-mono transition-colors cursor-pointer"
-            >
-              Key Tick
-            </button>
-            <button
-              type="button"
-              onClick={() => playStarkPowerSurgeSwoosh()}
-              className="px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white text-[10px] font-mono transition-colors cursor-pointer"
-            >
-              Swoosh
-            </button>
-            <button
-              type="button"
-              onClick={() => playMetallicCoinChime()}
-              className="px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.08] hover:text-white text-[10px] font-mono transition-colors cursor-pointer"
-            >
-              Chime
-            </button>
+          <div className="grid grid-cols-4 gap-2.5">
+            {QUICK_ADD_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => onQuickAdd(preset)}
+                className="min-h-[52px] p-2.5 rounded-xl border border-slate-800/90 bg-[#0c1220] hover:bg-[#131c31] hover:border-indigo-500/40 active:scale-[0.98] transition-all flex flex-col items-center justify-center text-center cursor-pointer"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="text-xs" aria-hidden="true">
+                    {preset.emoji}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-200">
+                    {preset.label}
+                  </span>
+                </div>
+                <span className="font-mono tabular-nums text-[11px] font-semibold text-indigo-300 mt-0.5">
+                  ₹{preset.amount}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* 3. SPENDING VISUALIZATION (Monthly Income vs Expense Chart + Category Breakdown) */}
+      <section
+        aria-label="Spending Visualization"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+      >
+        {/* Monthly Income vs. Expense Chart */}
+        <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <BarChart3 className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                  Monthly Income vs. Expense
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                4-week cashflow comparison ({monthName})
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-[10px] font-mono">
+              <span className="flex items-center gap-1 text-emerald-300">
+                <span className="w-2 h-2 rounded-xs bg-emerald-500" />
+                Income
+              </span>
+              <span className="flex items-center gap-1 text-indigo-300">
+                <span className="w-2 h-2 rounded-xs bg-indigo-500" />
+                Expense
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-3 items-end h-36 pt-4 px-1">
+            {cashflowChartData.map((bucket) => {
+              const incHeight =
+                bucket.income > 0
+                  ? Math.max(12, Math.round((bucket.income / maxChartVal) * 100))
+                  : 4;
+              const expHeight =
+                bucket.expense > 0
+                  ? Math.max(12, Math.round((bucket.expense / maxChartVal) * 100))
+                  : 4;
+
+              return (
+                <div
+                  key={bucket.label}
+                  className="flex flex-col items-center justify-end h-full gap-1.5"
+                >
+                  <div className="w-full flex items-end justify-center gap-1.5 h-24 px-1 border-b border-slate-800 pb-1">
+                    {/* Income Bar */}
+                    <div
+                      title={`${bucket.dateRange} Income: ₹${bucket.income.toLocaleString("en-IN")}`}
+                      style={{ height: `${incHeight}%` }}
+                      className="w-3.5 sm:w-4 rounded-t-md bg-emerald-500/85 hover:bg-emerald-400 transition-all"
+                    />
+                    {/* Expense Bar */}
+                    <div
+                      title={`${bucket.dateRange} Expense: ₹${bucket.expense.toLocaleString("en-IN")}`}
+                      style={{ height: `${expHeight}%` }}
+                      className="w-3.5 sm:w-4 rounded-t-md bg-indigo-500/85 hover:bg-indigo-400 transition-all"
+                    />
+                  </div>
+                  <div className="text-center">
+                    <span className="text-[10px] font-semibold text-slate-200 block">
+                      {bucket.label}
+                    </span>
+                    <span className="font-mono tabular-nums text-[9px] text-slate-400 block">
+                      −₹{bucket.expense.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-400">
+            <span>
+              Inflow:{" "}
+              <strong className="text-emerald-400">
+                +₹{stealthMode ? "0" : financialTotals.totalIncome.toLocaleString("en-IN")}
+              </strong>
+            </span>
+            <span>
+              Outflow:{" "}
+              <strong className="text-slate-200">
+                −₹{stealthMode ? "0" : financialTotals.totalExpenses.toLocaleString("en-IN")}
+              </strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Category-Wise Spending Breakdown */}
+        <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <PieChartIcon className="w-4 h-4 text-violet-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                  Category Breakdown
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Where your money goes by category
+              </p>
+            </div>
+            {onNavigateTab && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab("insights")}
+                className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
+              >
+                <span>Full Report</span>
+                <TrendingUp className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {categoryBreakdown.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-xs text-slate-400">No expense categories recorded yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {/* Proportional Stacked Bar */}
+              <div className="h-2.5 w-full rounded-full overflow-hidden flex bg-slate-900">
+                {categoryBreakdown.map((item) => (
+                  <div
+                    key={item.category}
+                    style={{
+                      width: `${Math.max(item.percent, 4)}%`,
+                      backgroundColor: item.color,
+                    }}
+                    className="h-full border-r border-[#0c1220] last:border-r-0"
+                    title={`${item.category}: ₹${item.amount.toLocaleString("en-IN")} (${item.percent}%)`}
+                  />
+                ))}
+              </div>
+
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                {categoryBreakdown.slice(0, 5).map((stat) => {
+                  const Icon = getCategoryIcon(stat.category);
+                  return (
+                    <div key={stat.category} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 bg-slate-900 border border-slate-800"
+                            style={{ color: stat.color }}
+                          >
+                            <Icon className="w-3 h-3" />
+                          </span>
+                          <span className="font-medium text-slate-200 truncate">
+                            {stat.category}
+                          </span>
+                        </div>
+                        <div className="font-mono tabular-nums text-right shrink-0">
+                          <span className="font-bold text-slate-100">
+                            {stealthMode ? "₹0" : `₹${stat.amount.toLocaleString("en-IN")}`}
+                          </span>
+                          <span className="text-[10px] text-slate-400 ml-1.5">
+                            {stat.percent}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-slate-900 overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.max(stat.percent, 3)}%`,
+                            backgroundColor: stat.color,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 };

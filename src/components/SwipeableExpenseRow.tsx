@@ -15,6 +15,12 @@ import {
   Flame,
   RefreshCw,
   QrCode,
+  Pencil,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Wallet,
+  Briefcase,
+  Sparkles,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { Expense, ExpenseCategory } from "../types";
@@ -23,6 +29,7 @@ import { playQuickAddChirp, playStarkPowerSurgeSwoosh } from "../utils/celebrati
 interface SwipeableExpenseRowProps {
   expense: Expense;
   onDelete: (id: string) => void;
+  onEdit?: (expense: Expense) => void;
   showDate?: boolean;
   myUpiId?: string;
 }
@@ -43,6 +50,14 @@ export function getCategoryIcon(category: ExpenseCategory) {
       return Receipt;
     case "Shopping":
       return ShoppingBag;
+    case "Salary":
+      return Wallet;
+    case "Freelance":
+      return Briefcase;
+    case "Cashback":
+      return Sparkles;
+    default:
+      return Receipt;
   }
 }
 
@@ -64,6 +79,7 @@ export function formatTimeShort(iso: string, includeDate = false): string {
 export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
   expense,
   onDelete,
+  onEdit,
   showDate = false,
   myUpiId,
 }) => {
@@ -184,15 +200,17 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
     }
   };
 
+  const isIncome = expense.type === "income";
+
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/5 hover:border-amber-400/30 bg-[#0a0e17] select-none group transition-colors">
+    <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 hover:border-indigo-500/35 bg-[#0c1220] select-none group transition-colors">
       {/* Revealed Delete Action Behind Row */}
       <div className="absolute inset-y-0 right-0 w-24 bg-rose-600/90 flex items-center justify-end pr-4">
         <button
           type="button"
           onClick={() => onDelete(expense.id)}
           className="min-h-[44px] min-w-[44px] flex items-center gap-1 text-xs font-bold text-white whitespace-nowrap shrink-0 cursor-pointer"
-          aria-label={`Delete expense ${expense.title}`}
+          aria-label={`Delete transaction ${expense.title}`}
         >
           <Trash2 className="w-4 h-4" />
           <span>Delete</span>
@@ -209,19 +227,46 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
         onMouseUp={handleMouseUpOrLeave}
         onMouseLeave={handleMouseUpOrLeave}
         style={{ transform: `translateX(${offsetX}px)` }}
-        className={`relative z-10 flex items-center justify-between gap-2.5 px-3.5 py-3 bg-[#0a0e17] hover:bg-[#0d131f] ${
+        className={`relative z-10 flex items-center justify-between gap-2.5 px-3.5 py-3 bg-[#0c1220] hover:bg-[#11192c] ${
           isDragging ? "" : "transition-transform duration-150 ease-out"
         } cursor-grab active:cursor-grabbing`}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-[#090d15] border border-white/5 flex items-center justify-center shrink-0 text-[#e6c875]">
+          <div
+            className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+              isIncome
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                : "bg-indigo-500/10 border-indigo-500/25 text-indigo-300"
+            }`}
+          >
             <Icon className="w-4 h-4" />
           </div>
 
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-100 truncate">
-              {expense.title}
-            </p>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <p className="text-sm font-semibold text-slate-100 truncate">
+                {expense.title}
+              </p>
+              <span
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold uppercase tracking-wider shrink-0 border ${
+                  isIncome
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                    : "bg-slate-800/90 border-slate-700/80 text-slate-300"
+                }`}
+              >
+                {isIncome ? (
+                  <>
+                    <ArrowDownLeft className="w-2.5 h-2.5 text-emerald-400" />
+                    <span>Income</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUpRight className="w-2.5 h-2.5 text-slate-400" />
+                    <span>Expense</span>
+                  </>
+                )}
+              </span>
+            </div>
             <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 truncate">
               <span>{expense.category}</span>
               <span aria-hidden="true" className="text-slate-600">·</span>
@@ -235,30 +280,54 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* 1-Tap Split Bill Trigger */}
-          <button
-            type="button"
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              playQuickAddChirp();
-              setIsSplitOpen((prev) => !prev);
-            }}
-            className={`px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-              isSplitOpen
-                ? "bg-amber-500/20 border-amber-400/50 text-amber-300"
-                : "bg-[#0d131f] border-white/10 text-slate-200 hover:border-amber-400/40 hover:text-amber-300"
-            }`}
-            title="Split this expense with friends"
-          >
-            <Split className="w-3 h-3 text-[#e6c875]" />
-            <span>Split</span>
-          </button>
+          {/* 1-Tap Split Bill Trigger (for Expense rows) */}
+          {!isIncome && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                playQuickAddChirp();
+                setIsSplitOpen((prev) => !prev);
+              }}
+              className={`px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                isSplitOpen
+                  ? "bg-indigo-500/20 border-indigo-400/50 text-indigo-200"
+                  : "bg-[#11192c] border-slate-700/80 text-slate-300 hover:border-indigo-400/40 hover:text-indigo-200"
+              }`}
+              title="Split this expense with friends"
+            >
+              <Split className="w-3 h-3 text-indigo-400" />
+              <span className="hidden xs:inline">Split</span>
+            </button>
+          )}
 
-          <span className="font-mono tabular-nums text-sm font-bold text-white whitespace-nowrap ml-0.5">
-            −₹{expense.amount.toLocaleString("en-IN")}
+          <span
+            className={`font-mono tabular-nums text-sm font-bold whitespace-nowrap ml-0.5 ${
+              isIncome ? "text-emerald-400" : "text-slate-100"
+            }`}
+          >
+            {isIncome ? "+" : "−"}₹{expense.amount.toLocaleString("en-IN")}
           </span>
+
+          {onEdit && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(expense);
+              }}
+              aria-label={`Edit ${expense.title}`}
+              title="Edit transaction"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           <button
             type="button"
             onMouseDown={(e) => e.stopPropagation()}
@@ -268,7 +337,8 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
               onDelete(expense.id);
             }}
             aria-label={`Remove ${expense.title}`}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-400 hover:text-rose-400 cursor-pointer"
+            title="Delete transaction"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

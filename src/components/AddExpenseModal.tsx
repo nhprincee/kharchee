@@ -17,7 +17,7 @@ import {
   Wifi,
   CreditCard,
 } from "lucide-react";
-import type { ExpenseCategory, FanTheme, PaymentMode } from "../types";
+import type { Expense, ExpenseCategory, FanTheme, PaymentMode, TransactionType } from "../types";
 import { parseBankSms, SAMPLE_BANK_SMS, type ParsedTransaction } from "../utils/smsParser";
 import {
   playQuickAddChirp,
@@ -32,14 +32,19 @@ interface AddExpenseModalProps {
   isOpen: boolean;
   lockdownActive: boolean;
   theme: FanTheme;
+  initialTab?: "ocr" | "nfc" | "sms" | "manual";
+  initialType?: TransactionType;
+  editingExpense?: Expense | null;
   onClose: () => void;
   onAddExpense: (data: {
     title: string;
     amount: number;
     category: ExpenseCategory;
     paymentMode: PaymentMode;
+    type?: TransactionType;
     note?: string;
   }) => void;
+  onUpdateExpense?: (expense: Expense) => void;
 }
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -50,6 +55,12 @@ const CATEGORIES: ExpenseCategory[] = [
   "Entertainment",
   "Bills",
   "Shopping",
+];
+
+const INCOME_CATEGORIES: ExpenseCategory[] = [
+  "Salary",
+  "Freelance",
+  "Cashback",
 ];
 
 const PAYMENT_MODES: PaymentMode[] = ["UPI", "Cash", "Card"];
@@ -122,10 +133,15 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   isOpen,
   lockdownActive,
   theme,
+  initialTab = "ocr",
+  initialType = "expense",
+  editingExpense = null,
   onClose,
   onAddExpense,
+  onUpdateExpense,
 }) => {
-  const [activeTab, setActiveTab] = useState<"ocr" | "nfc" | "sms" | "manual">("ocr");
+  const [activeTab, setActiveTab] = useState<"ocr" | "nfc" | "sms" | "manual">(initialTab);
+  const [transactionType, setTransactionType] = useState<TransactionType>(initialType);
 
   // Manual Form State
   const [title, setTitle] = useState("");
@@ -135,6 +151,29 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   const [note, setNote] = useState("");
   const [overrideConfirmed, setOverrideConfirmed] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (editingExpense) {
+      setActiveTab("manual");
+      const editType: TransactionType = editingExpense.type === "income" ? "income" : "expense";
+      setTransactionType(editType);
+      setTitle(editingExpense.title);
+      setAmount(String(editingExpense.amount));
+      setCategory(editingExpense.category);
+      setPaymentMode(editingExpense.paymentMode);
+      setNote(editingExpense.note || "");
+      setError("");
+    } else {
+      setActiveTab(initialType === "income" ? "manual" : initialTab);
+      setTransactionType(initialType);
+      setCategory(initialType === "income" ? "Salary" : "Food");
+      setTitle("");
+      setAmount("");
+      setNote("");
+      setError("");
+    }
+  }, [isOpen, editingExpense, initialTab, initialType]);
 
   // NFC Reader State
   const [isScanningNfc, setIsScanningNfc] = useState(false);
@@ -159,6 +198,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     amount: number;
     category: ExpenseCategory;
     paymentMode: PaymentMode;
+    type?: TransactionType;
     note?: string;
   } | null>(null);
   const [coolOffSeconds, setCoolOffSeconds] = useState<number>(300);
@@ -174,6 +214,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     amount: number;
     category: ExpenseCategory;
     paymentMode: PaymentMode;
+    type?: TransactionType;
     note?: string;
   } | null>(null);
 
@@ -196,7 +237,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       ? parsedData.category
       : category;
   const isCravingCategorySelected =
-    activeCategoryForShield === "Food" || activeCategoryForShield === "Chai & Snacks";
+    transactionType === "expense" &&
+    (activeCategoryForShield === "Food" || activeCategoryForShield === "Chai & Snacks");
 
   const commitOrInterceptExpense = (
     payload: {
@@ -204,11 +246,29 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       amount: number;
       category: ExpenseCategory;
       paymentMode: PaymentMode;
+      type?: TransactionType;
       note?: string;
     },
     forceProceed = false
   ) => {
+    if (editingExpense && onUpdateExpense) {
+      onUpdateExpense({
+        ...editingExpense,
+        title: payload.title,
+        amount: payload.amount,
+        category: payload.category,
+        paymentMode: payload.paymentMode,
+        type: payload.type || "expense",
+        note: payload.note,
+      });
+      onClose();
+      return;
+    }
+
+    const isIncomeEntry = payload.type === "income";
+
     const isLateNightCravingCandidate =
+      !isIncomeEntry &&
       (isRealLateNightHours() || simulateLateNight) &&
       (payload.category === "Food" || payload.category === "Chai & Snacks");
 
@@ -219,6 +279,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     }
 
     const isImpulseCandidate =
+      !isIncomeEntry &&
       payload.amount > 500 &&
       (payload.category === "Shopping" || payload.category === "Entertainment");
 
@@ -511,14 +572,14 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     e.preventDefault();
     const numericAmount = Number(amount);
     if (!title.trim()) {
-      setError("Enter expense title.");
+      setError(transactionType === "income" ? "Enter income source title." : "Enter expense title.");
       return;
     }
     if (Number.isNaN(numericAmount) || numericAmount <= 0) {
       setError("Enter a valid rupee amount.");
       return;
     }
-    if (lockdownActive && !overrideConfirmed) {
+    if (lockdownActive && transactionType === "expense" && !overrideConfirmed) {
       setError("Please confirm Emergency Lockdown override.");
       return;
     }
@@ -528,23 +589,20 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       amount: Math.round(numericAmount),
       category,
       paymentMode,
+      type: transactionType,
       note: note.trim() || undefined,
     });
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 backdrop-blur-md p-0"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-expense-title"
     >
       <div
-        className="w-full max-w-[430px] rounded-t-[36px] border-t border-x bg-slate-950 p-5 pb-6 shadow-2xl animate-in slide-in-from-bottom duration-300 relative overflow-hidden max-h-[92vh] flex flex-col"
-        style={{
-          borderColor: `${theme.accentHex}40`,
-          boxShadow: `0 -10px 40px ${theme.accentHex}20, 0 -2px 10px rgba(0,0,0,0.8)`,
-        }}
+        className="w-full max-w-[460px] rounded-t-[32px] sm:rounded-3xl border border-slate-800 bg-[#0b101d] p-5 pb-6 shadow-2xl animate-in slide-in-from-bottom duration-300 relative overflow-hidden max-h-[92vh] flex flex-col"
       >
         {/* Hidden Camera & Upload Inputs */}
         <input
@@ -563,20 +621,20 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           className="hidden"
         />
 
-        {/* Subtle theme radial glow */}
-        <div
-          className="absolute -top-10 left-1/2 -translate-x-1/2 w-64 h-32 rounded-full blur-2xl pointer-events-none opacity-20"
-          style={{ background: theme.accentHex }}
-        />
-
         {/* Mobile Sheet Drag Handle */}
-        <div className="w-10 h-1.5 bg-slate-800 rounded-full mx-auto mb-3 shrink-0" />
+        <div className="w-10 h-1.5 bg-slate-800 rounded-full mx-auto mb-3 shrink-0 sm:hidden" />
 
         {/* Modal Header */}
         <div className="flex items-center justify-between mb-3 relative z-10 shrink-0">
           <div>
             <h2 id="add-expense-title" className="text-base font-extrabold text-slate-100 tracking-tight flex items-center gap-1.5">
-              <span>Log Expense</span>
+              <span>
+                {editingExpense
+                  ? "Edit Transaction"
+                  : transactionType === "income" && activeTab === "manual"
+                  ? "Log Income"
+                  : "Log Transaction"}
+              </span>
               {activeTab === "ocr" && (
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
                   GEMINI VISION OCR
@@ -594,7 +652,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               )}
             </h2>
             <p className="text-[11px] text-slate-400">
-              Scan bill · Tap NFC Card/Tag · Paste SMS · Manual
+              {editingExpense
+                ? "Update amount, category, type, or payment method"
+                : "Scan bill · Tap NFC Card/Tag · Paste SMS · Manual"}
             </p>
           </div>
           <button
@@ -796,16 +856,24 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               </button>
             </div>
 
-            {/* Scanning Progress & Image Preview */}
+            {/* Scanning Progress & Skeleton Placeholder */}
             {isScanningOcr && (
-              <div className="p-4 rounded-2xl border border-cyan-400/40 bg-slate-900/90 flex flex-col items-center justify-center gap-2 text-center animate-pulse">
-                <div className="flex items-center gap-2 text-cyan-300 font-mono text-xs font-bold">
-                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
-                  <span>Gemini Vision OCR scanning bill...</span>
+              <div className="p-4 rounded-2xl border border-indigo-500/40 bg-slate-900/90 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-indigo-300 font-mono text-xs font-bold">
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                    <span>Gemini Vision OCR scanning receipt...</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400">Analyzing</span>
                 </div>
-                <p className="text-[11px] text-slate-400">
-                  Extracting Merchant Name, Grand Total, and Category
-                </p>
+                <div className="flex items-center gap-3 animate-pulse">
+                  <div className="w-12 h-12 rounded-xl bg-slate-800 shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-2/3 rounded bg-slate-800" />
+                    <div className="h-3 w-1/2 rounded bg-slate-800/80" />
+                  </div>
+                  <div className="h-6 w-16 rounded bg-slate-800 shrink-0" />
+                </div>
               </div>
             )}
 
@@ -1177,7 +1245,43 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         {/* Tab 2: Manual Entry Form */}
         {activeTab === "manual" && (
           <form onSubmit={handleSubmitManual} className="space-y-3 relative z-10 overflow-y-auto pr-0.5 no-scrollbar flex-1">
-            {lastNfcTap && (
+            {/* Transaction Type Segmented Control: Expense vs Income */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setTransactionType("expense");
+                  if (INCOME_CATEGORIES.includes(category)) {
+                    setCategory("Food");
+                  }
+                }}
+                className={`py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  transactionType === "expense"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <span>− Expense Outflow</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTransactionType("income");
+                  if (!INCOME_CATEGORIES.includes(category)) {
+                    setCategory("Salary");
+                  }
+                }}
+                className={`py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  transactionType === "income"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <span>+ Income Inflow</span>
+              </button>
+            </div>
+
+            {lastNfcTap && transactionType === "expense" && (
               <div className="p-2.5 rounded-2xl bg-emerald-950/40 border border-emerald-400/50 flex items-center justify-between gap-2 animate-in fade-in duration-150">
                 <div className="flex items-center gap-2 min-w-0">
                   <Wifi className="w-4 h-4 text-emerald-400 rotate-90 shrink-0" />
@@ -1213,7 +1317,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                   type="number"
                   inputMode="numeric"
                   min="1"
-                  placeholder="150"
+                  placeholder={transactionType === "income" ? "25000" : "150"}
                   value={amount}
                   onChange={(e) => {
                     playMechanicalKeyTick();
@@ -1231,12 +1335,16 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
             <div>
               <label htmlFor="title" className="block text-[11px] font-bold text-slate-300 mb-1">
-                Title
+                {transactionType === "income" ? "Income Source / Description" : "Description / Merchant"}
               </label>
               <input
                 id="title"
                 type="text"
-                placeholder="e.g. Cold Coffee, Metro card, Shawarma"
+                placeholder={
+                  transactionType === "income"
+                    ? "e.g. Monthly Salary, Freelance Client, UPI Cashback"
+                    : "e.g. Cold Coffee, Metro card, Shawarma"
+                }
                 value={title}
                 onChange={(e) => {
                   setTitle(e.target.value);
@@ -1254,29 +1362,25 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                 Category
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {CATEGORIES.map((cat) => (
+                {(transactionType === "income" ? INCOME_CATEGORIES : CATEGORIES).map((cat) => (
                   <button
                     key={cat}
                     type="button"
                     onClick={() => {
                       setCategory(cat);
                       if (
+                        transactionType === "expense" &&
                         (cat === "Food" || cat === "Chai & Snacks") &&
                         (isRealLateNightHours() || simulateLateNight)
                       ) {
                         playMidnightCravingsChime();
                       }
                     }}
-                    style={
-                      category === cat
-                        ? {
-                            boxShadow: `0 0 12px ${theme.ringGlow}`,
-                          }
-                        : undefined
-                    }
                     className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
                       category === cat
-                        ? `${theme.buttonBg} ${theme.buttonText}`
+                        ? transactionType === "income"
+                          ? "bg-emerald-600 text-white"
+                          : "bg-indigo-600 text-white"
                         : "bg-slate-900/90 border border-white/10 text-slate-300 hover:bg-slate-800"
                     }`}
                   >
@@ -1289,7 +1393,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             <div className="grid grid-cols-2 gap-2.5">
               <div>
                 <span className="block text-[11px] font-bold text-slate-300 mb-1">
-                  Payment
+                  Payment Mode
                 </span>
                 <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900 border border-white/10">
                   {PAYMENT_MODES.map((mode) => (
@@ -1336,12 +1440,17 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               </button>
               <button
                 type="submit"
-                style={{
-                  boxShadow: `0 0 20px ${theme.ringGlow}`,
-                }}
-                className={`flex-1 h-11 rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all ${theme.buttonBg} ${theme.buttonText}`}
+                className={`flex-1 h-11 rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all text-white ${
+                  transactionType === "income"
+                    ? "bg-emerald-600 hover:bg-emerald-500"
+                    : "bg-indigo-600 hover:bg-indigo-500"
+                }`}
               >
-                Save Expense
+                {editingExpense
+                  ? "Update Transaction"
+                  : transactionType === "income"
+                  ? "Save Income"
+                  : "Save Expense"}
               </button>
             </div>
           </form>

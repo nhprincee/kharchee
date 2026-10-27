@@ -24,13 +24,16 @@ interface InsightsViewProps {
 }
 
 const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
-  Food: "#f97316",
+  Food: "#6366f1",
   "Chai & Snacks": "#eab308",
   Transport: "#38bdf8",
   Grocery: "#10b981",
   Entertainment: "#a855f7",
   Bills: "#f43f5e",
   Shopping: "#ec4899",
+  Salary: "#10b981",
+  Freelance: "#34d399",
+  Cashback: "#2dd4bf",
 };
 
 export const InsightsView: React.FC<InsightsViewProps> = ({
@@ -44,15 +47,32 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
   const [isRoastStoryMode, setIsRoastStoryMode] = useState(true);
   const [wrapNotice, setWrapNotice] = useState<string | null>(null);
 
+  const expenseOnlyRecords = useMemo(
+    () => expenses.filter((e) => e.type !== "income"),
+    [expenses]
+  );
+
+  const incomeOnlyRecords = useMemo(
+    () => expenses.filter((e) => e.type === "income"),
+    [expenses]
+  );
+
   const filteredByRange = useMemo(() => {
     const cutoff = Date.now() - rangeDays * 86400000;
-    return expenses.filter((e) => new Date(e.timestamp).getTime() >= cutoff);
-  }, [expenses, rangeDays]);
+    return expenseOnlyRecords.filter((e) => new Date(e.timestamp).getTime() >= cutoff);
+  }, [expenseOnlyRecords, rangeDays]);
 
   const totalSpent = useMemo(
     () => filteredByRange.reduce((sum, e) => sum + e.amount, 0),
     [filteredByRange]
   );
+
+  const totalIncomeInRange = useMemo(() => {
+    const cutoff = Date.now() - rangeDays * 86400000;
+    return incomeOnlyRecords
+      .filter((e) => new Date(e.timestamp).getTime() >= cutoff)
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [incomeOnlyRecords, rangeDays]);
 
   // Category Breakdown ("Paisa Kahan Gaya?")
   const categoryStats = useMemo(() => {
@@ -67,7 +87,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
         amount: data.amount,
         count: data.count,
         percent: totalSpent > 0 ? Math.round((data.amount / totalSpent) * 100) : 0,
-        color: CATEGORY_COLORS[category],
+        color: CATEGORY_COLORS[category] || "#6366f1",
       }))
       .sort((a, b) => b.amount - a.amount);
   }, [filteredByRange, totalSpent]);
@@ -85,7 +105,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
-      const daySpent = expenses
+      const daySpent = expenseOnlyRecords
         .filter((e) => new Date(e.timestamp).toDateString() === d.toDateString())
         .reduce((sum, e) => sum + e.amount, 0);
 
@@ -97,7 +117,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
       });
     }
     return days;
-  }, [expenses, dailyLimit]);
+  }, [expenseOnlyRecords, dailyLimit]);
 
   const maxDaySpend = useMemo(() => {
     const highest = Math.max(dailyLimit, ...last7Days.map((d) => d.spent));
@@ -108,7 +128,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
   const runwayTelemetry = useMemo(() => {
     const monthlyBudget = Math.max(1500, dailyLimit * 30);
     const cutoff30 = Date.now() - 30 * 86400000;
-    const monthlySpent = expenses
+    const monthlySpent = expenseOnlyRecords
       .filter((e) => new Date(e.timestamp).getTime() >= cutoff30)
       .reduce((sum, e) => sum + e.amount, 0);
 
@@ -919,19 +939,22 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
       </section>
 
       {/* KPI Cards Strip */}
-      <div className="grid grid-cols-2 gap-2.5">
-        <div className="p-3.5 rounded-2xl border border-white/10 bg-[#0a0e17] backdrop-blur-md shadow-[0_6px_20px_rgba(0,0,0,0.6),0_0_14px_rgba(6,182,212,0.06)]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Outflow</span>
-          <p className="font-mono tabular-nums text-xl font-extrabold text-white mt-0.5">
-            ₹{totalSpent.toLocaleString("en-IN")}
+      <div className="grid grid-cols-3 gap-2.5">
+        <div className="p-3.5 rounded-2xl border border-slate-800 bg-[#0c1220]">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Inflow (+)</span>
+          <p className="font-mono tabular-nums text-lg font-extrabold text-emerald-400 mt-0.5">
+            +₹{totalIncomeInRange.toLocaleString("en-IN")}
           </p>
         </div>
-        <div className="p-3.5 rounded-2xl border border-white/10 bg-[#0a0e17] backdrop-blur-md shadow-[0_6px_20px_rgba(0,0,0,0.6),0_0_14px_rgba(6,182,212,0.06)]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Discipline Streak</span>
-          <p
-            className="font-mono tabular-nums text-xl font-extrabold mt-0.5"
-            style={{ color: theme.accentHex }}
-          >
+        <div className="p-3.5 rounded-2xl border border-slate-800 bg-[#0c1220]">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Outflow (−)</span>
+          <p className="font-mono tabular-nums text-lg font-extrabold text-white mt-0.5">
+            −₹{totalSpent.toLocaleString("en-IN")}
+          </p>
+        </div>
+        <div className="p-3.5 rounded-2xl border border-slate-800 bg-[#0c1220]">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Streak</span>
+          <p className="font-mono tabular-nums text-lg font-extrabold text-indigo-400 mt-0.5">
             {streakDays}d active
           </p>
         </div>

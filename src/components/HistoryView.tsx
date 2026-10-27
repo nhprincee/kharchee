@@ -1,13 +1,15 @@
 import React, { useState, useMemo } from "react";
-import { Search, Download, ReceiptText, Check, FileSpreadsheet } from "lucide-react";
-import type { Expense, ExpenseCategory, FanTheme, PaymentMode } from "../types";
+import { Search, Download, ReceiptText, Check, FileSpreadsheet, Plus } from "lucide-react";
+import type { Expense, ExpenseCategory, FanTheme, PaymentMode, TransactionType } from "../types";
 import { SwipeableExpenseRow } from "./SwipeableExpenseRow";
 
 interface HistoryViewProps {
   expenses: Expense[];
   theme: FanTheme;
   onDeleteExpense: (id: string) => void;
+  onEditExpense?: (expense: Expense) => void;
   onOpenAddModal: () => void;
+  onOpenAddIncomeModal?: () => void;
   onShowToast?: (message: string) => void;
 }
 
@@ -20,6 +22,9 @@ const CATEGORY_FILTERS: Array<"All" | ExpenseCategory> = [
   "Entertainment",
   "Bills",
   "Shopping",
+  "Salary",
+  "Freelance",
+  "Cashback",
 ];
 
 const MODE_FILTERS: Array<"All" | PaymentMode> = ["All", "UPI", "Cash", "Card"];
@@ -48,10 +53,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   expenses,
   theme,
   onDeleteExpense,
+  onEditExpense,
   onOpenAddModal,
+  onOpenAddIncomeModal,
   onShowToast,
 }) => {
   const [query, setQuery] = useState("");
+  const [selectedType, setSelectedType] = useState<"All" | TransactionType>("All");
   const [selectedCategory, setSelectedCategory] = useState<"All" | ExpenseCategory>("All");
   const [selectedMode, setSelectedMode] = useState<"All" | PaymentMode>("All");
   const [isExporting, setIsExporting] = useState(false);
@@ -59,6 +67,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const filteredExpenses = useMemo(() => {
     return expenses
       .filter((exp) => {
+        const expType: TransactionType = exp.type === "income" ? "income" : "expense";
+        if (selectedType !== "All" && expType !== selectedType) {
+          return false;
+        }
         if (selectedCategory !== "All" && exp.category !== selectedCategory) {
           return false;
         }
@@ -76,10 +88,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         return true;
       })
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [expenses, query, selectedCategory, selectedMode]);
+  }, [expenses, query, selectedType, selectedCategory, selectedMode]);
 
   const groupedByDate = useMemo(() => {
-    const groups: Array<{ dateKey: string; label: string; total: number; items: Expense[] }> = [];
+    const groups: Array<{
+      dateKey: string;
+      label: string;
+      expenseTotal: number;
+      incomeTotal: number;
+      items: Expense[];
+    }> = [];
     const map = new Map<string, Expense[]>();
 
     for (const exp of filteredExpenses) {
@@ -94,24 +112,44 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     }
 
     for (const [dateKey, items] of map.entries()) {
-      const total = items.reduce((acc, item) => acc + item.amount, 0);
+      const expenseTotal = items
+        .filter((i) => i.type !== "income")
+        .reduce((acc, item) => acc + item.amount, 0);
+      const incomeTotal = items
+        .filter((i) => i.type === "income")
+        .reduce((acc, item) => acc + item.amount, 0);
       groups.push({
         dateKey,
         label: formatDayGroupLabel(dateKey),
-        total,
+        expenseTotal,
+        incomeTotal,
         items,
       });
     }
     return groups;
   }, [filteredExpenses]);
 
-  const totalFilteredAmount = useMemo(
-    () => filteredExpenses.reduce((sum, e) => sum + e.amount, 0),
+  const filteredOutflow = useMemo(
+    () =>
+      filteredExpenses
+        .filter((e) => e.type !== "income")
+        .reduce((sum, e) => sum + e.amount, 0),
+    [filteredExpenses]
+  );
+
+  const filteredInflow = useMemo(
+    () =>
+      filteredExpenses
+        .filter((e) => e.type === "income")
+        .reduce((sum, e) => sum + e.amount, 0),
     [filteredExpenses]
   );
 
   const isFiltered =
-    selectedCategory !== "All" || selectedMode !== "All" || query.trim().length > 0;
+    selectedType !== "All" ||
+    selectedCategory !== "All" ||
+    selectedMode !== "All" ||
+    query.trim().length > 0;
 
   // Export transaction history as CSV file
   const handleExportCsv = (exportAll = false) => {
@@ -129,7 +167,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         "Transaction ID",
         "Date",
         "Time",
-        "Expense Title",
+        "Type",
+        "Title",
         "Category",
         "Payment Mode",
         "Amount (INR)",
@@ -149,16 +188,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           hour12: true,
         });
         const safeId = `"${e.id.replace(/"/g, '""')}"`;
+        const safeType = e.type === "income" ? "Income" : "Expense";
         const safeTitle = `"${e.title.replace(/"/g, '""')}"`;
         const safeCategory = `"${e.category.replace(/"/g, '""')}"`;
         const safeMode = `"${e.paymentMode.replace(/"/g, '""')}"`;
-        const safeAmount = e.amount;
+        const safeAmount = e.type === "income" ? e.amount : -e.amount;
         const safeNote = `"${(e.note || "").replace(/"/g, '""')}"`;
 
         return [
           safeId,
           dateStr,
           timeStr,
+          safeType,
           safeTitle,
           safeCategory,
           safeMode,
@@ -167,7 +208,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         ].join(",");
       });
 
-      // UTF-8 BOM prefix ensures correct display in Excel, Numbers & Google Sheets
       const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -192,11 +232,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Search & Header Strip with Export CSV Action Button */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <h2 className="text-lg font-bold text-slate-100">History</h2>
-          <p className="text-[11px] text-slate-400">
-            {filteredExpenses.length} transactions · Total ₹{totalFilteredAmount.toLocaleString("en-IN")}
+          <h2 className="text-lg font-bold text-slate-100">Transaction Ledger</h2>
+          <p className="text-xs text-slate-400 font-mono tabular-nums mt-0.5">
+            {filteredExpenses.length} records · Outflow −₹{filteredOutflow.toLocaleString("en-IN")} · Inflow +₹{filteredInflow.toLocaleString("en-IN")}
           </p>
         </div>
 
@@ -207,14 +247,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           disabled={filteredExpenses.length === 0}
           aria-label="Export transaction history as CSV file"
           title="Download transaction history as a CSV file to your device"
-          style={{
-            borderColor: `${theme.accentHex}40`,
-            boxShadow: `0 0 16px ${theme.ringGlow}`,
-          }}
-          className={`text-xs font-bold flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+          className={`text-xs font-semibold flex items-center gap-1.5 px-3.5 py-2 rounded-xl border transition-all active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
             isExporting
               ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-300"
-              : `${theme.buttonBg} ${theme.buttonText}`
+              : "bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white"
           }`}
         >
           {isExporting ? (
@@ -233,9 +269,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       {/* Quick Info & Format Indicator */}
       {isFiltered && expenses.length > filteredExpenses.length && (
-        <div className="flex items-center justify-between p-2.5 rounded-xl border border-white/10 bg-[#0a0e17] text-[11px] text-slate-300 shadow-[0_4px_14px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center justify-between p-2.5 rounded-xl border border-slate-800 bg-[#0c1220] text-[11px] text-slate-300">
           <div className="flex items-center gap-1.5">
-            <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
             <span>
               Showing {filteredExpenses.length} of {expenses.length} records
             </span>
@@ -243,26 +279,42 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <button
             type="button"
             onClick={() => handleExportCsv(true)}
-            className="text-[10px] font-bold text-cyan-400 hover:text-cyan-300 underline cursor-pointer"
+            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
           >
             Export All ({expenses.length})
           </button>
         </div>
       )}
 
-      {/* Search Input */}
-      <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          type="search"
-          placeholder="Search chai, petrol, biryani..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{
-            borderColor: query ? theme.accentHex : undefined,
-          }}
-          className="w-full h-10 pl-9 pr-3 rounded-2xl bg-[#0a0e17] border border-white/10 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors shadow-[0_4px_14px_rgba(0,0,0,0.5)]"
-        />
+      {/* Search Input & Type Filter */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="search"
+            placeholder="Search description, category, notes..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full h-10 pl-9 pr-3 rounded-xl bg-[#0c1220] border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/60 transition-colors"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0c1220] border border-slate-800 shrink-0">
+          {(["All", "expense", "income"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setSelectedType(t)}
+              className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                selectedType === t
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {t === "All" ? "All Types" : t === "expense" ? "Expenses (−)" : "Income (+)"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Horizontal Category Filters */}
@@ -272,17 +324,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             key={cat}
             type="button"
             onClick={() => setSelectedCategory(cat)}
-            style={
+            className={`px-3 py-1 rounded-xl text-[11px] font-semibold whitespace-nowrap shrink-0 transition-all cursor-pointer border ${
               selectedCategory === cat
-                ? {
-                    boxShadow: `0 0 12px ${theme.ringGlow}`,
-                  }
-                : undefined
-            }
-            className={`px-3 py-1 rounded-xl text-[11px] font-semibold whitespace-nowrap shrink-0 transition-all cursor-pointer ${
-              selectedCategory === cat
-                ? `${theme.buttonBg} ${theme.buttonText}`
-                : "bg-[#0a0e17] border border-white/10 text-slate-400 hover:text-slate-200"
+                ? "bg-indigo-600 border-indigo-500 text-white"
+                : "bg-[#0c1220] border-slate-800 text-slate-400 hover:text-slate-200"
             }`}
           >
             {cat}
@@ -291,15 +336,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       </div>
 
       {/* Payment Mode Segmented Control */}
-      <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0a0e17] border border-white/10 shadow-[0_4px_14px_rgba(0,0,0,0.5)]">
+      <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0c1220] border border-slate-800">
         {MODE_FILTERS.map((mode) => (
           <button
             key={mode}
             type="button"
             onClick={() => setSelectedMode(mode)}
-            className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+            className={`flex-1 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
               selectedMode === mode
-                ? "bg-[#05070c] border border-white/10 text-white shadow-xs"
+                ? "bg-slate-800 border border-slate-700 text-white"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -310,25 +355,36 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       {/* Timeline Groups */}
       {groupedByDate.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-[#0a0e17] p-8 text-center backdrop-blur-sm shadow-[0_6px_20px_rgba(0,0,0,0.6),0_0_16px_rgba(6,182,212,0.06)]">
+        <div className="rounded-2xl border border-slate-800 bg-[#0c1220] p-8 text-center">
           <ReceiptText className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-          <p className="text-xs font-semibold text-slate-300">No matching expenses</p>
-          <div className="flex items-center justify-center gap-2 mt-3">
+          <p className="text-sm font-semibold text-slate-200">No matching transactions</p>
+          <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+            Log an expense, record an income inflow, or adjust your search filters.
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
             <button
               type="button"
               onClick={onOpenAddModal}
-              style={{
-                boxShadow: `0 0 16px ${theme.ringGlow}`,
-              }}
-              className={`px-4 py-1.5 rounded-xl text-xs font-bold ${theme.buttonBg} ${theme.buttonText} cursor-pointer`}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 cursor-pointer"
             >
-              + Add Expense
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Expense</span>
             </button>
+            {onOpenAddIncomeModal && (
+              <button
+                type="button"
+                onClick={onOpenAddIncomeModal}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Income</span>
+              </button>
+            )}
             {expenses.length > 0 && (
               <button
                 type="button"
                 onClick={() => handleExportCsv(true)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#05070c] border border-white/10 text-slate-200 hover:text-white cursor-pointer"
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-200 hover:text-white cursor-pointer"
               >
                 Export All ({expenses.length})
               </button>
@@ -341,9 +397,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <div key={group.dateKey} className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-bold text-slate-300">{group.label}</span>
-                <span className="font-mono tabular-nums text-[11px] text-slate-400 font-semibold">
-                  ₹{group.total.toLocaleString("en-IN")}
-                </span>
+                <div className="flex items-center gap-2 font-mono tabular-nums text-[11px] font-semibold">
+                  {group.incomeTotal > 0 && (
+                    <span className="text-emerald-400">
+                      +₹{group.incomeTotal.toLocaleString("en-IN")}
+                    </span>
+                  )}
+                  {group.expenseTotal > 0 && (
+                    <span className="text-slate-400">
+                      −₹{group.expenseTotal.toLocaleString("en-IN")}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
                 {group.items.map((expense) => (
@@ -351,6 +416,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     key={expense.id}
                     expense={expense}
                     onDelete={onDeleteExpense}
+                    onEdit={onEditExpense}
                   />
                 ))}
               </div>

@@ -160,6 +160,27 @@ const CATEGORY_KEYWORDS: Record<ExpenseCategory, string[]> = {
     "mall",
     "clothing",
   ],
+  Salary: [
+    "salary",
+    "payroll",
+    "stipend",
+    "neft credit",
+    "employer",
+  ],
+  Freelance: [
+    "freelance",
+    "client",
+    "invoice",
+    "retainer",
+    "consulting",
+  ],
+  Cashback: [
+    "cashback",
+    "reward",
+    "refund",
+    "reversal",
+    "dividend",
+  ],
 };
 
 /**

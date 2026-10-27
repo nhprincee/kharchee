@@ -1,5 +1,7 @@
 export type TabId = "home" | "history" | "insights" | "khata" | "pro";
 
+export type TransactionType = "expense" | "income";
+
 export type ExpenseCategory =
   | "Food"
   | "Chai & Snacks"
@@ -7,7 +9,10 @@ export type ExpenseCategory =
   | "Grocery"
   | "Entertainment"
   | "Bills"
-  | "Shopping";
+  | "Shopping"
+  | "Salary"
+  | "Freelance"
+  | "Cashback";
 
 export type PaymentMode = "UPI" | "Cash" | "Card";
 
@@ -18,6 +23,7 @@ export interface Expense {
   amount: number;
   timestamp: string; // ISO string
   paymentMode: PaymentMode;
+  type?: TransactionType; // defaults to "expense" for backward compatibility
   note?: string;
 }
 
