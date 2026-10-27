@@ -146,6 +146,35 @@ function isValidExpenseRecord(item: unknown): item is Expense {
   return true;
 }
 
+function isValidKhataFriend(item: unknown): item is KhataFriend {
+  if (!item || typeof item !== "object") return false;
+  const friend = item as Record<string, unknown>;
+  if (typeof friend.id !== "string" || !friend.id.trim()) return false;
+  if (typeof friend.name !== "string" || !friend.name.trim()) return false;
+  if (typeof friend.phone !== "string") return false;
+  if (typeof friend.avatarInitials !== "string") return false;
+  if (!Array.isArray(friend.entries)) return false;
+  for (const entry of friend.entries) {
+    if (!entry || typeof entry !== "object") return false;
+    const e = entry as Record<string, unknown>;
+    if (typeof e.id !== "string" || !e.id.trim()) return false;
+    if (typeof e.description !== "string" || !e.description.trim()) return false;
+    if (
+      typeof e.amount !== "number" ||
+      !Number.isFinite(e.amount) ||
+      e.amount === 0 ||
+      Math.abs(e.amount) > 10000000
+    ) {
+      return false;
+    }
+    if (typeof e.timestamp !== "string" || Number.isNaN(Date.parse(e.timestamp))) {
+      return false;
+    }
+    if (typeof e.settled !== "boolean") return false;
+  }
+  return true;
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [now, setNow] = useState<Date>(() => new Date());
@@ -153,7 +182,11 @@ export function App() {
   // Persistent State
   const [dailyLimit, setDailyLimit] = useState<number>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.dailyLimit);
-    return saved ? Number(saved) || 500 : 500;
+    const parsed = saved ? Number(saved) : NaN;
+    if (Number.isFinite(parsed) && parsed >= 50 && parsed <= 1000000) {
+      return Math.round(parsed);
+    }
+    return 500;
   });
 
   const [expenses, setExpenses] = useState<Expense[]>(() => {
@@ -177,7 +210,7 @@ export function App() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed as KhataFriend[];
+          return parsed.filter(isValidKhataFriend);
         }
       } catch {
         return createInitialKhata();
@@ -191,6 +224,10 @@ export function App() {
   });
 
   const [themeId, setThemeId] = useState<ThemeId>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.theme);
+    if (saved && saved in FAN_THEMES) {
+      return saved as ThemeId;
+    }
     return "avengers";
   });
 
@@ -839,8 +876,19 @@ export function App() {
 
   const handleUpdateExpense = (updated: Expense) => {
     playQuickAddChirp();
-    setExpenses((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    const nextList = expenses.map((e) => (e.id === updated.id ? updated : e));
+    setExpenses(nextList);
     setEditingExpense(null);
+
+    if (updated.type !== "income") {
+      const todayStr = now.toDateString();
+      const nextToday = nextList
+        .filter((e) => e.type !== "income" && new Date(e.timestamp).toDateString() === todayStr)
+        .reduce((sum, e) => sum + e.amount, 0);
+      checkAutoLockdown(nextToday);
+      checkBudgetThresholdAlerts(todaySpent, nextToday);
+    }
+
     showToast(
       `Updated ${updated.title} (${
         updated.type === "income" ? "+" : "−"
@@ -1163,14 +1211,7 @@ export function App() {
           localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(validatedExpenses));
         }
         if (Array.isArray(parsed.khataFriends)) {
-          const validatedFriends = parsed.khataFriends.filter(
-            (f) =>
-              f &&
-              typeof f === "object" &&
-              typeof f.id === "string" &&
-              typeof f.name === "string" &&
-              Array.isArray(f.entries)
-          );
+          const validatedFriends = parsed.khataFriends.filter(isValidKhataFriend);
           setKhataFriends(validatedFriends);
           localStorage.setItem(STORAGE_KEYS.khata, JSON.stringify(validatedFriends));
         }
@@ -1180,8 +1221,20 @@ export function App() {
           parsed.dailyLimit >= 50 &&
           parsed.dailyLimit <= 1000000
         ) {
-          setDailyLimit(parsed.dailyLimit);
-          localStorage.setItem(STORAGE_KEYS.dailyLimit, String(parsed.dailyLimit));
+          setDailyLimit(Math.round(parsed.dailyLimit));
+          localStorage.setItem(STORAGE_KEYS.dailyLimit, String(Math.round(parsed.dailyLimit)));
+        }
+        if (typeof parsed.themeId === "string" && parsed.themeId in FAN_THEMES) {
+          setThemeId(parsed.themeId as ThemeId);
+          localStorage.setItem(STORAGE_KEYS.theme, parsed.themeId);
+        }
+        if (typeof parsed.lockdownActive === "boolean") {
+          setLockdownActive(parsed.lockdownActive);
+          localStorage.setItem(STORAGE_KEYS.lockdown, String(parsed.lockdownActive));
+        }
+        if (typeof parsed.autoLockdownAt90 === "boolean") {
+          setAutoLockdownAt90(parsed.autoLockdownAt90);
+          localStorage.setItem(STORAGE_KEYS.autoLockdown, String(parsed.autoLockdownAt90));
         }
         if (typeof parsed.myUpiId === "string" && parsed.myUpiId.includes("@")) {
           setMyUpiId(parsed.myUpiId.trim());
@@ -1229,6 +1282,36 @@ export function App() {
     };
     reader.readAsText(file);
   };
+
+  // Global Escape key listener for accessible modal dismissal
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (isFakeMomCallOpen) {
+        handleEndFakeMomCall();
+      } else if (isThemeModalOpen) {
+        setIsThemeModalOpen(false);
+      } else if (isAddModalOpen) {
+        setIsAddModalOpen(false);
+        setEditingExpense(null);
+      } else if (isProfileOpen) {
+        setIsProfileOpen(false);
+      } else if (isJarvisOpen) {
+        setIsJarvisOpen(false);
+      } else if (isRewardVaultOpen) {
+        setIsRewardVaultOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    isFakeMomCallOpen,
+    isThemeModalOpen,
+    isAddModalOpen,
+    isProfileOpen,
+    isJarvisOpen,
+    isRewardVaultOpen,
+  ]);
 
   const navItems: Array<{
     id: TabId;
@@ -1753,7 +1836,7 @@ export function App() {
           type="button"
           onClick={handleOpenJarvisWithBootSequence}
           aria-label="J.A.R.V.I.S. Online - Open Tactical Financial Butler"
-          className="fixed bottom-20 right-4 z-40 w-16 h-16 rounded-full bg-[#0b0f17] flex items-center justify-center active:scale-95 transition-transform cursor-pointer group"
+          className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 w-16 h-16 rounded-full bg-[#0b0f17] flex items-center justify-center active:scale-95 transition-transform cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
         >
           {/* Idle Circular Cyber Ripples Expanding Outward into the Screen */}
           <span
@@ -1988,24 +2071,25 @@ export function App() {
           }}
         />
 
-        {/* Undo Toast Banner */}
+        {/* Undo & Confirmation Toast Banner */}
         {toast && (
           <div
             role="status"
-            className="absolute left-3 right-3 bottom-20 z-40 rounded-2xl border px-3.5 py-2.5 shadow-2xl flex items-center justify-between gap-2 backdrop-blur-md bg-slate-900/95 transition-all"
+            aria-live="polite"
+            className="fixed left-4 right-4 md:left-auto md:right-24 md:w-96 bottom-20 md:bottom-6 z-50 rounded-2xl border px-3.5 py-2.5 shadow-2xl flex items-center justify-between gap-2 backdrop-blur-md bg-slate-900/95 transition-all"
             style={{
               borderColor: `${theme.accentHex}40`,
               boxShadow: `0 0 24px ${theme.accentHex}25`,
             }}
           >
-            <span className="text-[11px] font-medium text-slate-100 truncate">
+            <span className="text-xs font-medium text-slate-100 truncate">
               {toast.message}
             </span>
             {toast.deletedExpense && (
               <button
                 type="button"
                 onClick={handleUndoDelete}
-                className="px-2 py-1 rounded-lg bg-slate-800 text-[10px] font-bold text-cyan-300 flex items-center gap-1 cursor-pointer shrink-0"
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-cyan-300 flex items-center gap-1 cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Undo</span>

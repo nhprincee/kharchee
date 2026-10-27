@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Flame, Gift, Eye, EyeOff, Download, Upload, Database, Palette } from "lucide-react";
 import { THEMES } from "./ThemeSelector";
 
@@ -35,6 +35,27 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [showBackupMenu, setShowBackupMenu] = useState(false);
   const backupFileInputRef = useRef<HTMLInputElement | null>(null);
+  const backupMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showBackupMenu) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (backupMenuRef.current && !backupMenuRef.current.contains(e.target as Node)) {
+        setShowBackupMenu(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowBackupMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showBackupMenu]);
 
   const activeTheme =
     THEMES.find(
@@ -73,7 +94,8 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={onOpenThemes}
           title="Change Theme"
-          className="relative p-1 rounded-xl bg-[#0f172a] border border-slate-800 hover:border-indigo-500/50 transition-colors cursor-pointer shrink-0"
+          aria-label="Change Theme"
+          className="relative p-1 rounded-xl bg-[#0f172a] border border-slate-800 hover:border-indigo-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 transition-colors cursor-pointer shrink-0"
         >
           <div className="w-8 h-8 flex items-center justify-center">
             {activeTheme.badgeSvg}
@@ -86,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="font-display font-black text-xs sm:text-sm tracking-[0.18em] text-white whitespace-nowrap">
               KHARCHEE
             </span>
-            <span className="text-slate-700 hidden sm:inline">/</span>
+            <span className="text-slate-600 hidden sm:inline" aria-hidden="true">/</span>
             <span className="text-xs sm:text-sm font-semibold text-indigo-300 truncate">
               {currentPageTitle}
             </span>
@@ -104,7 +126,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onOpenThemes}
           title="Theme Selector"
           aria-label="Open Theme Selector"
-          className="h-8 px-2.5 rounded-lg bg-[#0f172a] border border-slate-800 hover:border-indigo-500/40 text-slate-300 hover:text-white flex items-center gap-1.5 text-[11px] font-medium transition-colors cursor-pointer"
+          className="h-8 px-2.5 rounded-lg bg-[#0f172a] border border-slate-800 hover:border-indigo-500/40 text-slate-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 flex items-center gap-1.5 text-[11px] font-medium transition-colors cursor-pointer"
         >
           <Palette className="w-3.5 h-3.5 text-indigo-400" />
           <span className="hidden md:inline">Theme</span>
@@ -120,7 +142,8 @@ export const Header: React.FC<HeaderProps> = ({
                 : "Enable Stealth Zero-Balance Shield"
             }
             aria-label="Toggle Stealth Zero-Balance Shield"
-            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors cursor-pointer ${
+            aria-pressed={stealthMode}
+            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
               stealthMode
                 ? "bg-indigo-500/20 border-indigo-400/50 text-indigo-200"
                 : "bg-[#0f172a] border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white"
@@ -136,13 +159,15 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Header 1-Tap Backup & Restore Popover Trigger */}
         {(onExportBackup || onImportBackup) && (
-          <div className="relative">
+          <div className="relative" ref={backupMenuRef}>
             <button
               type="button"
               onClick={() => setShowBackupMenu((v) => !v)}
               title="LocalStorage Backup: Export / Import JSON"
               aria-label="Backup and Restore Data"
-              className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors cursor-pointer ${
+              aria-expanded={showBackupMenu}
+              aria-haspopup="menu"
+              className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
                 showBackupMenu
                   ? "bg-indigo-500/20 border-indigo-400/50 text-indigo-300"
                   : "bg-[#0f172a] border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white"
@@ -152,7 +177,11 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {showBackupMenu && (
-              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#0c1220] border border-slate-700 p-2 shadow-2xl z-50 space-y-1.5">
+              <div
+                role="menu"
+                aria-label="Backup and Restore Menu"
+                className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#0c1220] border border-slate-700 p-2 shadow-2xl z-50 space-y-1.5"
+              >
                 <div className="px-2 py-1 border-b border-slate-800">
                   <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-300 block">
                     Data Backup &amp; Restore
@@ -161,11 +190,12 @@ export const Header: React.FC<HeaderProps> = ({
                 {onExportBackup && (
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={() => {
                       onExportBackup();
                       setShowBackupMenu(false);
                     }}
-                    className="w-full px-2.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left text-xs font-semibold text-white flex items-center gap-2 cursor-pointer transition-colors"
+                    className="w-full px-2.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left text-xs font-semibold text-white flex items-center gap-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
                   >
                     <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                     <span>Export Backup (JSON)</span>
@@ -174,8 +204,9 @@ export const Header: React.FC<HeaderProps> = ({
                 {onImportBackup && (
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={() => backupFileInputRef.current?.click()}
-                    className="w-full px-2.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left text-xs font-semibold text-slate-200 flex items-center gap-2 cursor-pointer transition-colors"
+                    className="w-full px-2.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left text-xs font-semibold text-slate-200 flex items-center gap-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
                   >
                     <Upload className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                     <span>Import / Restore Backup</span>
