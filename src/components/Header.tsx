@@ -124,12 +124,12 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={onOpenThemes}
-          title="Theme Selector"
-          aria-label="Open Theme Selector"
+          title="Appearance"
+          aria-label="Open Appearance"
           className="h-8 px-2.5 rounded-lg bg-[#0f172a] border border-slate-800 hover:border-indigo-500/40 text-slate-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 flex items-center gap-1.5 text-[11px] font-medium transition-colors cursor-pointer"
         >
           <Palette className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="hidden md:inline">Theme</span>
+          <span className="hidden md:inline">Appearance</span>
         </button>
 
         {onToggleStealthMode && (
