@@ -1215,10 +1215,8 @@ export function App() {
           setDailyLimit(Math.round(parsed.dailyLimit));
           localStorage.setItem(STORAGE_KEYS.dailyLimit, String(Math.round(parsed.dailyLimit)));
         }
-        if (typeof parsed.themeId === "string" && parsed.themeId in FAN_THEMES) {
-          setThemeId(parsed.themeId as ThemeId);
-          localStorage.setItem(STORAGE_KEYS.theme, parsed.themeId);
-        }
+        setThemeId("stark");
+        localStorage.setItem(STORAGE_KEYS.theme, "stark");
         if (typeof parsed.lockdownActive === "boolean") {
           setLockdownActive(parsed.lockdownActive);
           localStorage.setItem(STORAGE_KEYS.lockdown, String(parsed.lockdownActive));
