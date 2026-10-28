@@ -457,7 +457,7 @@ export function App() {
 
   // Receiving UPI ID (Khata Direct Settlement)
   const [myUpiId, setMyUpiId] = useState<string>(() => {
-    return localStorage.getItem("kharche_my_upi_id_v1") || "mrigander@upi";
+    return localStorage.getItem("kharche_my_upi_id_v1") || "";
   });
 
   // Global Smart Clipboard & SMS Auto-Detection State
