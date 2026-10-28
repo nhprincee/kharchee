@@ -74,7 +74,7 @@ export const ProView: React.FC<ProViewProps> = ({
   todaySpent = 0,
   expenses = [],
   friends = [],
-  myUpiId = "mrigander@upi",
+  myUpiId = "",
   cardholderName = "MRIGANDER SINGH",
   onSelectTheme,
   onApplyCustomTheme,
@@ -1427,8 +1427,9 @@ export const ProView: React.FC<ProViewProps> = ({
         <div className="p-2 rounded-2xl bg-[#050811]/95 backdrop-blur-2xl border border-amber-400/35 border-t border-t-amber-200/40 shadow-[0_-12px_35px_rgba(0,0,0,0.95),0_0_25px_rgba(251,191,36,0.22)]">
           <button
             type="button"
+            disabled={isProActive}
             onClick={() => handleOpenCheckoutDrawer(selectedPlan)}
-            className="relative overflow-hidden w-full min-h-[50px] px-4 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-black font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border border-amber-100/80 shadow-[0_0_25px_rgba(251,191,36,0.55),inset_0_1px_1px_rgba(255,255,255,0.8)] active:scale-[0.98] transition-all cursor-pointer group"
+            className="relative overflow-hidden w-full min-h-[50px] px-4 rounded-xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-black font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border border-amber-100/80 shadow-[0_0_25px_rgba(251,191,36,0.55),inset_0_1px_1px_rgba(255,255,255,0.8)] active:scale-[0.98] transition-all cursor-pointer group disabled:cursor-not-allowed disabled:opacity-60"
           >
             {/* Continuous Soft Light Reflection Animation */}
             <span
@@ -1437,7 +1438,7 @@ export const ProView: React.FC<ProViewProps> = ({
             />
             <Crown className="w-4 h-4 fill-black text-black relative z-10 shrink-0" />
             <span className="relative z-10 whitespace-nowrap">
-              {selectedPlanCtaLabel}
+              {isProActive ? "PRO SUBSCRIPTION ACTIVE" : selectedPlanCtaLabel}
             </span>
           </button>
         </div>
