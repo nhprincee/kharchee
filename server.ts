@@ -564,7 +564,6 @@ async function getOpenAIJarvisReply(
   return payload.choices?.[0]?.message?.content?.trim() || "";
 }
 
-const OPENAI_TEXT_MODEL = process.env.OPENAI_MODEL || "gpt-4o";
 const GEMINI_TEXT_MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
 const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
 
@@ -737,16 +736,16 @@ async function startServer() {
       try {
         const reply = await getOpenAIJarvisReply(userPrompt, snapshot, mode, history);
         const text = reply || buildDynamicJarvisReply(userPrompt, snapshot, preDetectedAction);
-        for (const piece of text.match(/.{1,42}(?:\\s|$)/g) || [text]) {
-          res.write(`data: ${JSON.stringify({ type: "chunk", text: piece })}\\n\\n`);
+        for (const piece of text.match(/.{1,42}(?:\s|$)/g) || [text]) {
+          res.write(`data: ${JSON.stringify({ type: "chunk", text: piece })}\n\n`);
         }
-        if (preDetectedAction) res.write(`data: ${JSON.stringify({ type: "action", action: preDetectedAction })}\\n\\n`);
-        res.write(`data: ${JSON.stringify({ type: "done", fullText: text, source: "openai-gpt-4o" })}\\n\\n`);
+        if (preDetectedAction) res.write(`data: ${JSON.stringify({ type: "action", action: preDetectedAction })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "done", fullText: text, source: "openai-gpt-4o" })}\n\n`);
         res.end();
       } catch {
         const message = "Jarvis couldn’t connect to GPT-4o. Check the server’s OPENAI_API_KEY and API access.";
-        res.write(`data: ${JSON.stringify({ type: "chunk", text: message })}\\n\\n`);
-        res.write(`data: ${JSON.stringify({ type: "done", fullText: message, source: "openai-error" })}\\n\\n`);
+        res.write(`data: ${JSON.stringify({ type: "chunk", text: message })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "done", fullText: message, source: "openai-error" })}\n\n`);
         res.end();
       }
       return;
