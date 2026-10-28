@@ -81,7 +81,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   const [nameInput, setNameInput] = useState(userName);
   const authEmail = localStorage.getItem(scopedProfileKey("kharche_auth_email_v1")) || localStorage.getItem(scopedProfileKey("kharche_user_email_v1")) || "";
   const authPhone = localStorage.getItem(scopedProfileKey("kharche_auth_phone_v1")) || "";
-  const userInitials = userName.trim().split(/\\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "K";
+  const userInitials = userName.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "K";
 
   
 
