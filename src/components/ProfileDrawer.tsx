@@ -67,15 +67,12 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
 
   // User Profile State
   const [userName, setUserName] = useState(() => {
-    return localStorage.getItem("kharche_user_name_v1") || "Mrigander Singh";
+    return localStorage.getItem("kharche_user_name_v1") || "";
   });
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(userName);
 
-  const [isLoggedInWithGoogle, setIsLoggedInWithGoogle] = useState(() => {
-    const saved = localStorage.getItem("kharche_google_auth_v1");
-    return saved !== null ? saved === "true" : true;
-  });
+  const [isLoggedInWithGoogle, setIsLoggedInWithGoogle] = useState(false);
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -119,13 +116,9 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
     localStorage.setItem("kharche_user_name_v1", userName);
   }, [userName]);
 
-  useEffect(() => {
-    localStorage.setItem("kharche_google_auth_v1", String(isLoggedInWithGoogle));
-  }, [isLoggedInWithGoogle]);
-
   // Dynamic CRED-Style Financial Discipline Score Calculation (300 to 900 scale)
   const disciplineScore = useMemo(() => {
-    let score = 740;
+    let score = 600;
     // Streak contribution (+8 per day, up to +96)
     score += Math.min(streakDays * 8, 96);
 
@@ -146,10 +139,10 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   }, [streakDays, todaySpent, dailyLimit]);
 
   const scoreTier = useMemo(() => {
-    if (disciplineScore >= 800) return { label: "EXCELLENT · TOP 3% DISCIPLINE", color: "#10b981" };
-    if (disciplineScore >= 720) return { label: "VERY GOOD · TOP 15%", color: "#06b6d4" };
-    if (disciplineScore >= 650) return { label: "AVERAGE · ROOM TO IMPROVE", color: "#f59e0b" };
-    return { label: "CRITICAL · NEEDS BRAKES", color: "#f43f5e" };
+    if (disciplineScore >= 800) return { label: "EXCELLENT DISCIPLINE", color: "#e2e8f0" };
+    if (disciplineScore >= 720) return { label: "VERY GOOD", color: "#cbd5e1" };
+    if (disciplineScore >= 650) return { label: "ROOM TO IMPROVE", color: "#94a3b8" };
+    return { label: "BUILD YOUR CONSISTENCY", color: "#64748b" };
   }, [disciplineScore]);
 
   // Save User Name
@@ -400,15 +393,15 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
             </div>
           </section>
 
-          {/* CRED-INSPIRED GLOWING CIRCULAR DISCIPLINE SCORE DIAL */}
+          {/* Premium metallic financial discipline score card */}
           <section
             style={{ borderColor: `${theme.accentHex}30` }}
-            className="p-4 rounded-3xl border bg-slate-900/80 backdrop-blur-md shadow-xl relative overflow-hidden"
+            className="metallic-score-card p-4 rounded-3xl border backdrop-blur-md shadow-xl relative overflow-hidden"
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-amber-400" />
-                <span>CRED FINANCIAL DISCIPLINE METER</span>
+                <span>SPENDING DISCIPLINE SCORE</span>
               </span>
               <span
                 className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border"
@@ -474,7 +467,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                   {scoreTier.label}
                 </p>
                 <p className="text-[11px] text-slate-300 leading-snug">
-                  Based on daily ₹{dailyLimit} budget intent &amp; {streakDays}-day streak resilience.
+                  An app estimate based on your budget activity and consistency.
                 </p>
                 <p className="text-[10px] text-slate-400 font-mono">
                   Today spent: ₹{todaySpent} ({Math.round((todaySpent / Math.max(1, dailyLimit)) * 100)}%)
@@ -492,130 +485,10 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                 )}
               </div>
             </div>
+            <p className="mt-3 border-t border-white/10 pt-2 text-[10px] leading-4 text-slate-500">This is an in-app discipline estimate, not a CIBIL or lender-issued credit score.</p>
           </section>
 
-          {/* 3. AUTH & ACCOUNT SECTION (GOOGLE SIGN-IN) */}
-          <section
-            style={{ borderColor: `${theme.accentHex}25` }}
-            className="p-4 rounded-3xl border bg-slate-900/70 space-y-3"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Authentication &amp; Account
-              </span>
-              {isLoggedInWithGoogle ? (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Active Session
-                </span>
-              ) : (
-                <span className="text-[10px] font-bold text-slate-500">Guest Mode</span>
-              )}
-            </div>
-
-            {isLoggedInWithGoogle ? (
-              <div className="space-y-2.5">
-                {/* Logged in state box */}
-                <div className="p-3 rounded-2xl bg-slate-950/80 border border-white/10 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {/* Official Google 'G' Icon */}
-                    <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm p-1">
-                      <svg viewBox="0 0 24 24" className="w-5 h-5">
-                        <path
-                          fill="#4285F4"
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                        />
-                      </svg>
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-white truncate">Logged in via Google</p>
-                      <p className="text-[10px] text-slate-400 font-mono truncate">
-                        mrigandersinghrajput@gmail.com
-                      </p>
-                    </div>
-                  </div>
-
-                  <span className="text-[10px] font-black uppercase text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full shrink-0">
-                    Synced
-                  </span>
-                </div>
-
-                {/* Logout Action Button */}
-                {!showLogoutConfirm ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowLogoutConfirm(true)}
-                    className="w-full h-9 rounded-xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-950/40 text-rose-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Log Out</span>
-                  </button>
-                ) : (
-                  <div className="p-2.5 rounded-xl border border-rose-500/40 bg-rose-950/30 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-rose-200">Confirm log out?</span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={handleLogout}
-                        className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] cursor-pointer"
-                      >
-                        Yes, Log Out
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowLogoutConfirm(false)}
-                        className="px-2 py-1 rounded-lg bg-slate-800 text-slate-300 text-[10px] cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Google Sign In Button */
-              <button
-                type="button"
-                onClick={handleGoogleLogin}
-                className="w-full min-h-[44px] px-4 py-2.5 rounded-2xl border border-white/20 bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs flex items-center justify-center gap-2.5 shadow-md active:scale-95 transition-all cursor-pointer"
-              >
-                <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
-            )}
-          </section>
-
-          {/* 4. CRED-STYLE "KHARCHE PRO BLACK EDITION" METALLIC CARD */}
+          {/* 3. KHARCHE PRO BLACK EDITION */}
           <section className="relative rounded-3xl p-5 overflow-hidden shadow-2xl border border-white/20 bg-gradient-to-br from-neutral-900 via-stone-950 to-black">
             {/* Holographic metallic edge accent */}
             <div
@@ -658,7 +531,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
               <div className="pt-2 border-t border-white/10 space-y-1.5 text-[11px] text-slate-300">
                 <div className="flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Unlimited Fan-Zone Club Themes (Avengers, Arc HUD, Madrid, Barca)</span>
+                  <span>Premium Obsidian Silver interface</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
