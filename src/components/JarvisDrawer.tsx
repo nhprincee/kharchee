@@ -297,6 +297,19 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
       disciplineScore,
       topCategories,
       recentTransactions,
+      // The backend prompt expects these canonical fields; keep them in sync
+      // so Jarvis can reason over actual transactions and Khata balances.
+      recentExpenses: expenses
+        .filter((e) => e.type !== "income")
+        .slice(0, 12)
+        .map((e) => ({
+          title: e.title,
+          category: e.category,
+          amount: e.amount,
+          timeLabel: formatTimeShort(e.timestamp),
+        })),
+      khataToReceive,
+      khataToPay,
       khataSummary: {
         toReceive: khataToReceive,
         toPay: khataToPay,
@@ -639,14 +652,14 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
     let spokenFirstSentence = false;
     let actionDetected: any = extractClientIntentAction(trimmed);
 
-    // 2. FAST 3-SECOND TIMEOUT FOR CLOUD STREAMING
+    // 2. Give Gemini enough time to generate a real answer before falling back
     const controller = new AbortController();
     let firstTokenReceived = false;
     const firstTokenTimer = setTimeout(() => {
       if (!firstTokenReceived) {
         controller.abort();
       }
-    }, 3000);
+    }, 20000);
 
     try {
       const streamResponse = await fetch("/api/jarvis/stream", {
