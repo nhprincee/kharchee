@@ -797,7 +797,11 @@ async function startServer() {
       const currentBilling = await db.collection("users").doc(uid).collection("billing").doc("current").get();
       const existingBilling = currentBilling.data();
       const existingEnd = Number(existingBilling?.currentPeriodEnd || 0);
-      if (existingBilling && (["authenticated", "active"].includes(String(existingBilling.status)) || String(existingBilling.status) === "cancelled") && (!existingEnd || existingEnd > Date.now())) {
+      const existingStatus = String(existingBilling?.status || "");
+      const currentSubscriptionStillValid =
+        (["authenticated", "active"].includes(existingStatus) && (!existingEnd || existingEnd > Date.now())) ||
+        (existingStatus === "cancelled" && existingEnd > Date.now());
+      if (existingBilling && currentSubscriptionStillValid) {
         res.status(409).json({ error: "Kharchee Pro is already active on this account." });
         return;
       }
@@ -944,7 +948,6 @@ async function startServer() {
       if (eventId) {
         const eventRef = db.collection("billingWebhookEvents").doc(eventId);
         if ((await eventRef.get()).exists) { res.status(200).json({ received: true, duplicate: true }); return; }
-        await eventRef.set({ event: event.event || "unknown", receivedAt: FieldValue.serverTimestamp() });
       }
       const eventName = String(event.event || "");
       const remoteStatus = String(subscription?.status || "");
@@ -959,7 +962,7 @@ async function startServer() {
           db.collection("users").doc(uid).collection("billing").doc("current").set(state, { merge: true }),
         ]);
       }
-      res.status(200).json({ received: true });
+      if (eventId) {\n        await db.collection("billingWebhookEvents").doc(eventId).set({ event: event.event || "unknown", receivedAt: FieldValue.serverTimestamp() });\n      }\n      res.status(200).json({ received: true });
     } catch {
       res.status(500).send("Webhook processing failed.");
     }
