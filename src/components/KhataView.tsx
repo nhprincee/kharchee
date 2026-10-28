@@ -62,7 +62,7 @@ interface KhataViewProps {
 export const KhataView: React.FC<KhataViewProps> = ({
   friends,
   theme,
-  myUpiId = "mrigander@upi",
+  myUpiId = "",
   onUpdateMyUpiId,
   onAddEntry,
   onAddFriendAndEntry,
@@ -137,8 +137,8 @@ export const KhataView: React.FC<KhataViewProps> = ({
   const [upiDraft, setUpiDraft] = useState("");
 
   // Split Bill State
-  const [splitDesc, setSplitDesc] = useState("Midnight Shawarma & Chai");
-  const [splitTotal, setSplitTotal] = useState("1200");
+  const [splitDesc, setSplitDesc] = useState("");
+  const [splitTotal, setSplitTotal] = useState("");
   const [selectedSplitIds, setSelectedSplitIds] = useState<string[]>(
     friends.map((f) => f.id)
   );
@@ -231,8 +231,8 @@ export const KhataView: React.FC<KhataViewProps> = ({
       .map((e) => `${e.description} (₹${e.amount})`)
       .join(", ");
 
-    const recipientUpi = myUpiId || "mrigander@upi";
-    const upiPayLink = `upi://pay?pa=${encodeURIComponent(recipientUpi)}&pn=Mrigander&am=${Math.abs(
+    const recipientUpi = myUpiId.trim();
+    const upiPayLink = `upi://pay?pa=${encodeURIComponent(recipientUpi)}&pn=Kharchee&am=${Math.abs(
       netAmount
     )}&tn=KharcheKhata&cu=INR`;
 
@@ -268,7 +268,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
       }
       onAddFriendAndEntry(
         newFriendName.trim(),
-        newFriendPhone.trim() || "919800000000",
+        newFriendPhone.replace(/\D/g, ""),
         entryDesc.trim(),
         signedAmount,
         newFriendUpi.trim() || undefined
@@ -387,7 +387,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
                   type="text"
                   value={myUpiDraft}
                   onChange={(e) => setMyUpiDraft(e.target.value)}
-                  placeholder="e.g. mrigander@upi"
+                  placeholder="yourname@upi"
                   className="h-7 px-2 text-xs font-mono rounded-lg bg-slate-950 border border-cyan-400 text-cyan-200 focus:outline-none w-36"
                   autoFocus
                 />
@@ -425,7 +425,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
           className="h-8 px-3 rounded-xl bg-slate-950 border text-xs font-bold text-slate-100 flex items-center gap-1.5 cursor-pointer hover:bg-slate-800 transition-all active:scale-95 shadow-2xs"
         >
           <QrCode className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Show My QR</span>
+          <span>{myUpiId.trim() ? "Show My QR" : "Add UPI for QR"}</span>
         </button>
       </div>
 
@@ -623,7 +623,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
                 />
                 <input
                   type="tel"
-                  placeholder="WhatsApp No."
+                  placeholder="WhatsApp number" required
                   value={newFriendPhone}
                   onChange={(e) => setNewFriendPhone(e.target.value)}
                   className="w-full h-9 px-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-100"
@@ -643,7 +643,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
             <div className="col-span-2">
               <input
                 type="text"
-                placeholder="Description (e.g. Swiggy order)"
+                placeholder="Description" required
                 value={entryDesc}
                 onChange={(e) => setEntryDesc(e.target.value)}
                 className="w-full h-9 px-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100"
@@ -653,7 +653,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
               <input
                 type="number"
                 min="1"
-                placeholder="₹ Amount"
+                placeholder="₹ Amount" required
                 value={entryAmount}
                 onChange={(e) => {
                   playMechanicalKeyTick();
@@ -694,10 +694,10 @@ export const KhataView: React.FC<KhataViewProps> = ({
         ];
         const totalAttendees = Math.max(1, attendeeNames.length);
         const perPersonSplitAmt = Math.ceil(parsedSplitTotal / totalAttendees);
-        const activeReceivingUpi = myUpiId || "mrigander@upi";
+        const activeReceivingUpi = myUpiId.trim();
         const splitUpiDeepLink = `upi://pay?pa=${encodeURIComponent(
           activeReceivingUpi
-        )}&pn=Mrigander&am=${perPersonSplitAmt}&cu=INR&tn=${encodeURIComponent(
+        )}&pn=Kharchee&am=${perPersonSplitAmt}&cu=INR&tn=${encodeURIComponent(
           `Split: ${splitDesc || "Group Bill"}`
         )}`;
         const groupWhatsappText = `⚡ *KHARCHE CYBERPUNK GROUP SPLIT BILL* ⚡\n\n🧾 Bill: *${
