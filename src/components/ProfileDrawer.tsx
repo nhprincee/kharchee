@@ -96,10 +96,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   const [upiError, setUpiError] = useState("");
 
   // PRO Tier UTR / Transaction Reference Verification State
-  const [proUtrInput, setProUtrInput] = useState(() => {
-    return localStorage.getItem(scopedProfileKey("kharche_pro_submitted_utr_v1")) || localStorage.getItem(scopedProfileKey("kharche_pro_utr_v1")) || "";
-  });
-  const [proUtrError, setProUtrError] = useState("");
+
 
   useEffect(() => {
     setUpiInput(myUpiId);
@@ -544,68 +541,21 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                 </div>
               </div>
 
-              {/* PRO Transaction Reference / UTR Number Verification */}
               {!isProActive ? (
-                <div className="pt-2 border-t border-white/10 space-y-2">
-                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-200 space-y-1">
-                    <p className="font-bold text-amber-300">Payment Verification Limitation</p>
-                    <p className="text-[10px] text-amber-100/80 leading-snug">
-                      A 12-digit UTR format check is not payment verification. Without an integrated payment gateway/webhook to confirm bank receipts, paid Pro status remains unverified.
-                    </p>
-                  </div>
-                  <label
-                    htmlFor="profile-pro-utr-input"
-                    className="block text-[10px] font-mono font-bold uppercase tracking-wider text-amber-300"
-                  >
-                    Enter Transaction Reference / UTR Number
-                  </label>
-                  <input
-                    id="profile-pro-utr-input"
-                    type="text"
-                    value={proUtrInput}
-                    onChange={(e) => {
-                      setProUtrInput(e.target.value);
-                      setProUtrError("");
-                    }}
-                    placeholder="e.g. 430189234512 (12-digit UPI UTR)"
-                    className="w-full h-9 px-3 rounded-xl bg-slate-950 border border-amber-400/40 text-xs font-mono font-bold text-amber-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                  />
-                  {proUtrError && (
-                    <p className="text-[10px] text-rose-400 font-medium">{proUtrError}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const cleanUtr = proUtrInput.trim();
-                      if (!/^\d{12}$/.test(cleanUtr)) {
-                        setProUtrError(
-                          "Please enter a valid 12-digit numeric UPI UTR / Reference Number (e.g. 430189234512)."
-                        );
-                        return;
-                      }
-                      localStorage.setItem(scopedProfileKey("kharche_pro_submitted_utr_v1"), cleanUtr);
-                      setProUtrError("");
-                      onShowToast(`Reference #${cleanUtr} recorded (Payment Unverified · No live gateway connected)`);
-                    }}
-                    className="w-full min-h-[38px] rounded-xl text-xs font-bold bg-slate-800 border border-amber-400/40 text-amber-300 hover:bg-slate-700 cursor-pointer active:scale-95 transition-all"
-                  >
-                    Submit Reference (Unverified)
+                <div className="pt-3 border-t border-white/10 space-y-2">
+                  <p className="text-[10px] leading-5 text-slate-400">Pro access is enabled only after secure checkout is verified by the server. A UPI reference number cannot unlock the subscription.</p>
+                  <button type="button" onClick={onTogglePro} className="w-full min-h-[40px] rounded-xl border border-slate-300/30 bg-gradient-to-r from-slate-100 to-slate-300 text-xs font-black text-slate-950 hover:brightness-105">
+                    View Pro subscription plans
                   </button>
-                  <p className="text-[10px] text-slate-400 text-center">
-                    To test Pro features, claim the official 3-Day Free Trial.
-                  </p>
                 </div>
               ) : (
-                <div className="pt-2 border-t border-white/10 space-y-2">
-                  <div className="flex items-center justify-between text-[10px] font-mono text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl">
-                    <span>PRO Status:</span>
-                    <span className="font-bold">
-                      {localStorage.getItem(scopedProfileKey("kharche_pro_trial_v1")) === "claimed" ? "3-Day Free Trial Active" : "Active"}
-                    </span>
+                <div className="pt-3 border-t border-white/10 space-y-2">
+                  <div className="flex items-center justify-between rounded-xl border border-emerald-500/25 bg-emerald-950/20 px-3 py-2 text-[10px] font-mono text-emerald-200">
+                    <span>Pro Status</span><span className="font-bold">Server verified</span>
                   </div>
-                  <div className="text-[10px] text-slate-400">
-                    Pro tier features unlocked for this session.
-                  </div>
+                  <button type="button" onClick={onTogglePro} className="w-full min-h-[38px] rounded-xl border border-slate-300/20 bg-white/[.04] text-xs font-bold text-slate-200 hover:bg-white/[.08]">
+                    Manage subscription
+                  </button>
                 </div>
               )}
             </div>
