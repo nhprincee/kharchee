@@ -116,7 +116,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const handleFinish = () => {
     onComplete({
       userName: userName.trim(),
-      email: userEmail.trim() || "mrigandersinghrajput@gmail.com",
+      email: userEmail.trim(),
       monthlyIncome: income,
       savingsTarget: monthlySavings,
       dailyLimit: calculatedDailyLimit,
