@@ -24,6 +24,11 @@ const configured = Boolean(config.apiKey && config.authDomain && config.projectI
 const firebaseApp = configured ? (getApps().length ? getApp() : initializeApp(config)) : null;
 const auth = firebaseApp ? getAuth(firebaseApp) : null;
 
+export async function getCurrentUserIdToken(): Promise<string | null> {
+  if (!auth?.currentUser) return null;
+  return auth.currentUser.getIdToken();
+}
+
 export async function signOutCurrentUser(): Promise<void> {
   if (auth) await signOut(auth);
   localStorage.removeItem("kharche_current_user_uid");
