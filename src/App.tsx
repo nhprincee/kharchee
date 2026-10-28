@@ -2214,10 +2214,9 @@ export function App() {
           }}
           onResetExpenses={handleResetAllExpenses}
           onTogglePro={() => {
-            const next = !isProActive;
-            setIsProActive(next);
-            localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(next));
-            showToast(next ? "KHARCHE PRO Black Active" : "Standard Tier");
+            setIsProfileOpen(false);
+            setActiveTab("pro");
+            showToast("Choose a Pro plan to continue to secure checkout.");
           }}
           onShowToast={showToast}
           onReplayTour={handleReplayTour}
