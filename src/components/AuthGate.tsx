@@ -6,6 +6,7 @@ import {
   onAuthStateChanged,
   signInWithPhoneNumber,
   signInWithPopup,
+  signOut,
   type ConfirmationResult,
   type User,
 } from "firebase/auth";
@@ -23,6 +24,11 @@ const configured = Boolean(config.apiKey && config.authDomain && config.projectI
 const firebaseApp = configured ? (getApps().length ? getApp() : initializeApp(config)) : null;
 const auth = firebaseApp ? getAuth(firebaseApp) : null;
 
+export async function signOutCurrentUser(): Promise<void> {
+  if (auth) await signOut(auth);
+  localStorage.removeItem("kharche_current_user_uid");
+}
+
 export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -39,8 +45,13 @@ export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
       return;
     }
     return onAuthStateChanged(auth, (nextUser) => {
-      if (nextUser) localStorage.setItem("kharche_current_user_uid", nextUser.uid);
-      else localStorage.removeItem("kharche_current_user_uid");
+      if (nextUser) {
+        localStorage.setItem("kharche_current_user_uid", nextUser.uid);
+        localStorage.setItem(`${nextUser.uid}:kharche_auth_email_v1`, nextUser.email || "");
+        localStorage.setItem(`${nextUser.uid}:kharche_auth_phone_v1`, nextUser.phoneNumber || "");
+      } else {
+        localStorage.removeItem("kharche_current_user_uid");
+      }
       setUser(nextUser);
       setAuthReady(true);
     });
@@ -97,7 +108,7 @@ export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
         recaptcha.current = new RecaptchaVerifier(auth, "kharchee-recaptcha", { size: "normal" });
       }
       const digits = phone.replace(/[^0-9]/g, "");
-      const e164 = phone.trim().startsWith("+") ? phone.trim() : `+91${digits}`;
+      const e164 = phone.trim().startsWith("+") ? `+${digits}` : `+91${digits}`;
       if (!/^\+[1-9]\d{7,14}$/.test(e164)) throw new Error("Enter a valid phone number with country code.");
       const result = await signInWithPhoneNumber(auth, e164, recaptcha.current);
       setConfirmation(result);
