@@ -788,11 +788,16 @@ async function startServer() {
       if (plan !== "monthly" && plan !== "quarterly") { res.status(400).json({ error: "Choose a valid Pro subscription plan." }); return; }
       const credentials = getRazorpayConfig();
       const planConfig = getPlanConfig(plan);
+      const razorpayPlan = await razorpayApi<{ id: string; period: string; interval: number; item?: { amount?: number; currency?: string } }>("plans/" + encodeURIComponent(planConfig.planId), "GET");
+      const expectedInterval = plan === "monthly" ? 1 : 3;
+      if (razorpayPlan.id !== planConfig.planId || razorpayPlan.item?.amount !== planConfig.amountPaise || razorpayPlan.item?.currency !== "INR" || razorpayPlan.period !== "monthly" || Number(razorpayPlan.interval) !== expectedInterval) {
+        throw new Error("Razorpay plan configuration mismatch. Confirm the exact price and billing interval in the Dashboard.");
+      }
       const { db } = getBillingServices();
       const currentBilling = await db.collection("users").doc(uid).collection("billing").doc("current").get();
       const existingBilling = currentBilling.data();
       const existingEnd = Number(existingBilling?.currentPeriodEnd || 0);
-      if (existingBilling && ["authenticated", "active"].includes(String(existingBilling.status)) && (!existingEnd || existingEnd > Date.now())) {
+      if (existingBilling && (["authenticated", "active"].includes(String(existingBilling.status)) || String(existingBilling.status) === "cancelled") && (!existingEnd || existingEnd > Date.now())) {
         res.status(409).json({ error: "Kharchee Pro is already active on this account." });
         return;
       }
@@ -878,7 +883,7 @@ async function startServer() {
       const periodEnd = remote.current_end ? remote.current_end * 1000 : Number(currentData?.currentPeriodEnd || 0);
       const state = {
         uid, subscriptionId, planKey: currentData?.planKey || stored.data()?.planKey || null,
-        status: remote.status || "cancelled", currentPeriodEnd: periodEnd || null,
+        status: "cancelled", currentPeriodEnd: periodEnd || null, cancelAtCycleEnd: true,
         updatedAt: FieldValue.serverTimestamp(),
       };
       await Promise.all([
