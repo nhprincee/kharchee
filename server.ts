@@ -4,6 +4,10 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { applicationDefault, cert, getApps as getAdminApps, initializeApp as initializeAdminApp } from "firebase-admin/app";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { type FunctionDeclaration, GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
@@ -696,13 +700,78 @@ function buildGeminiPayload(
   return { systemInstruction, turns, tools: jarvisTools };
 }
 
+
+type BillingPlanKey = "monthly" | "quarterly";
+type RazorpaySubscription = { id: string; plan_id: string; status: string; current_end?: number | null; notes?: Record<string, string> };
+
+function getBillingServices() {
+  const existing = getAdminApps().find((item) => item.name === "kharchee-billing");
+  if (existing) return { auth: getAdminAuth(existing), db: getFirestore(existing) };
+  const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (rawServiceAccount) {
+    const account = JSON.parse(rawServiceAccount) as { project_id: string; client_email: string; private_key: string };
+    const adminApp = initializeAdminApp({
+      credential: cert({ projectId: account.project_id, clientEmail: account.client_email, privateKey: account.private_key }),
+      projectId: account.project_id || process.env.VITE_FIREBASE_PROJECT_ID,
+    }, "kharchee-billing");
+    return { auth: getAdminAuth(adminApp), db: getFirestore(adminApp) };
+  }
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    const adminApp = initializeAdminApp({
+      credential: applicationDefault(),
+      projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
+    }, "kharchee-billing");
+    return { auth: getAdminAuth(adminApp), db: getFirestore(adminApp) };
+  }
+  throw new Error("Firebase Admin credentials are not configured.");
+}
+
+async function verifyBillingUser(req: Request): Promise<string> {
+  const authorization = req.header("authorization") || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+  if (!token) throw new Error("Sign in to manage a Pro subscription.");
+  const { auth } = getBillingServices();
+  return (await auth.verifyIdToken(token, true)).uid;
+}
+
+function getRazorpayConfig() {
+  const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+  const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+  if (!keyId || !keySecret) throw new Error("Razorpay server credentials are not configured.");
+  return { keyId, keySecret };
+}
+
+function getPlanConfig(plan: BillingPlanKey) {
+  const planId = plan === "monthly" ? process.env.RAZORPAY_MONTHLY_PLAN_ID?.trim() : process.env.RAZORPAY_QUARTERLY_PLAN_ID?.trim();
+  if (!planId) throw new Error("Razorpay plan ID is not configured.");
+  return { planId, amountPaise: plan === "monthly" ? 3900 : 9900, label: plan === "monthly" ? "Kharchee Pro Monthly" : "Kharchee Pro Quarterly", totalCount: plan === "monthly" ? 120 : 40, periodMs: plan === "monthly" ? 30 * 24 * 60 * 60 * 1000 : 90 * 24 * 60 * 60 * 1000 };
+}
+
+async function razorpayApi<T>(pathName: string, method: "GET" | "POST", body?: unknown): Promise<T> {
+  const credentials = getRazorpayConfig();
+  const response = await fetch("https://api.razorpay.com/v1/" + pathName, {
+    method,
+    headers: { Authorization: "Basic " + Buffer.from(credentials.keyId + ":" + credentials.keySecret).toString("base64"), "Content-Type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const data = await response.json().catch(() => ({})) as T & { error?: { description?: string } };
+  if (!response.ok) throw new Error(data.error?.description || "Payment provider request failed.");
+  return data;
+}
+
+function secureSignatureMatches(message: string, suppliedSignature: string, secret: string): boolean {
+  const expectedBuffer = Buffer.from(createHmac("sha256", secret).update(message).digest("hex"), "utf8");
+  const suppliedBuffer = Buffer.from(suppliedSignature || "", "utf8");
+  return expectedBuffer.length === suppliedBuffer.length && timingSafeEqual(expectedBuffer, suppliedBuffer);
+}
+
 async function startServer() {
   const app = express();
   const defaultJsonParser = express.json({ limit: "256kb" });
   const ocrReceiptJsonParser = express.json({ limit: "8mb" });
 
   app.use((req: Request, res: Response, next: () => void) => {
-    if (req.path === "/api/ocr/receipt") {
+    if (req.path === "/api/ocr/receipt" || req.path === "/api/billing/webhook") {
       next();
       return;
     }
@@ -710,6 +779,139 @@ async function startServer() {
   });
 
   app.use("/api", apiRateLimiter);
+
+
+  app.post("/api/billing/subscription", async (req: Request, res: Response) => {
+    try {
+      const uid = await verifyBillingUser(req);
+      const plan = req.body?.plan as BillingPlanKey;
+      if (plan !== "monthly" && plan !== "quarterly") { res.status(400).json({ error: "Choose a valid Pro subscription plan." }); return; }
+      const credentials = getRazorpayConfig();
+      const planConfig = getPlanConfig(plan);
+      const { db } = getBillingServices();
+      const subscription = await razorpayApi<RazorpaySubscription>("subscriptions", "POST", {
+        plan_id: planConfig.planId, total_count: planConfig.totalCount, quantity: 1, customer_notify: 1,
+        notes: { firebase_uid: uid, product: "kharchee_pro", plan_key: plan },
+      });
+      await db.collection("billingSubscriptions").doc(subscription.id).set({
+        uid, subscriptionId: subscription.id, planKey: plan, planId: planConfig.planId, status: "created",
+        amountPaise: planConfig.amountPaise, createdAt: FieldValue.serverTimestamp(),
+      });
+      await db.collection("users").doc(uid).collection("billing").doc("current").set({
+        uid, subscriptionId: subscription.id, planKey: plan, status: "created", amountPaise: planConfig.amountPaise,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      res.status(201).json({ keyId: credentials.keyId, subscriptionId: subscription.id, plan, amountPaise: planConfig.amountPaise, label: planConfig.label });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not start checkout.";
+      const status = message.includes("Sign in") ? 401 : message.includes("not configured") ? 503 : 400;
+      res.status(status).json({ error: status === 503 ? "Pro billing is not configured yet. Please try again later." : message });
+    }
+  });
+
+  app.post("/api/billing/verify", async (req: Request, res: Response) => {
+    try {
+      const uid = await verifyBillingUser(req);
+      const paymentId = String(req.body?.razorpay_payment_id || "");
+      const subscriptionId = String(req.body?.razorpay_subscription_id || "");
+      const signature = String(req.body?.razorpay_signature || "");
+      if (!paymentId || !subscriptionId || !signature) { res.status(400).json({ error: "Payment confirmation details are incomplete." }); return; }
+      const credentials = getRazorpayConfig();
+      const { db } = getBillingServices();
+      const subscriptionRef = db.collection("billingSubscriptions").doc(subscriptionId);
+      const stored = await subscriptionRef.get();
+      if (!stored.exists || stored.data()?.uid !== uid) { res.status(403).json({ error: "This subscription does not belong to the signed-in account." }); return; }
+      if (!secureSignatureMatches(paymentId + "|" + subscriptionId, signature, credentials.keySecret)) { res.status(400).json({ error: "Payment signature verification failed." }); return; }
+      const remote = await razorpayApi<RazorpaySubscription>("subscriptions/" + encodeURIComponent(subscriptionId), "GET");
+      const record = stored.data()!;
+      const plan = record.planKey as BillingPlanKey;
+      const expectedPlan = getPlanConfig(plan);
+      if (remote.id !== subscriptionId || remote.plan_id !== expectedPlan.planId || remote.notes?.firebase_uid !== uid) {
+        res.status(400).json({ error: "The verified subscription does not match this account or plan." }); return;
+      }
+      if (!["authenticated", "active"].includes(remote.status)) {
+        res.status(409).json({ error: "Payment is awaiting subscription activation. Please check again shortly.", pending: true }); return;
+      }
+      const periodEnd = remote.current_end ? remote.current_end * 1000 : Date.now() + expectedPlan.periodMs;
+      const billingState = {
+        uid, subscriptionId, planKey: plan, status: remote.status, paymentId, currentPeriodEnd: periodEnd,
+        amountPaise: expectedPlan.amountPaise, verifiedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      };
+      await Promise.all([
+        subscriptionRef.set(billingState, { merge: true }),
+        db.collection("users").doc(uid).collection("billing").doc("current").set(billingState, { merge: true }),
+      ]);
+      res.status(200).json({ active: true, plan, currentPeriodEnd: periodEnd });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Payment verification failed.";
+      const status = message.includes("Sign in") ? 401 : message.includes("not configured") ? 503 : 400;
+      res.status(status).json({ error: status === 503 ? "Pro billing is not configured yet." : message });
+    }
+  });
+
+  app.get("/api/billing/status", async (req: Request, res: Response) => {
+    try {
+      const uid = await verifyBillingUser(req);
+      const { db } = getBillingServices();
+      const snapshot = await db.collection("users").doc(uid).collection("billing").doc("current").get();
+      const record = snapshot.data();
+      if (!record) { res.status(200).json({ active: false, plan: null }); return; }
+      const periodEnd = Number(record.currentPeriodEnd || 0);
+      const active = ["authenticated", "active"].includes(String(record.status)) && (!periodEnd || periodEnd > Date.now());
+      res.status(200).json({ active, plan: active ? record.planKey || null : null, currentPeriodEnd: periodEnd || null, status: record.status || "inactive" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not read subscription status.";
+      const status = message.includes("Sign in") ? 401 : 503;
+      res.status(status).json({ error: status === 401 ? message : "Subscription status is temporarily unavailable." });
+    }
+  });
+
+  app.post("/api/billing/webhook", express.raw({ type: "application/json", limit: "256kb" }), async (req: Request, res: Response) => {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
+    if (!webhookSecret) { res.status(503).send("Webhook secret is not configured."); return; }
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
+    const suppliedSignature = String(req.header("x-razorpay-signature") || "");
+    const expectedBuffer = Buffer.from(createHmac("sha256", webhookSecret).update(rawBody).digest("hex"), "utf8");
+    const suppliedBuffer = Buffer.from(suppliedSignature, "utf8");
+    if (expectedBuffer.length !== suppliedBuffer.length || !timingSafeEqual(expectedBuffer, suppliedBuffer)) { res.status(400).send("Invalid webhook signature."); return; }
+    try {
+      const event = JSON.parse(rawBody.toString("utf8")) as {
+        event?: string;
+        payload?: { subscription?: { entity?: RazorpaySubscription }; payment?: { entity?: { subscription_id?: string } } };
+      };
+      const subscription = event.payload?.subscription?.entity;
+      const subscriptionId = subscription?.id || event.payload?.payment?.entity?.subscription_id;
+      if (!subscriptionId) { res.status(200).json({ received: true, ignored: true }); return; }
+      const { db } = getBillingServices();
+      const subscriptionRef = db.collection("billingSubscriptions").doc(subscriptionId);
+      const stored = await subscriptionRef.get();
+      if (!stored.exists) { res.status(200).json({ received: true, ignored: true }); return; }
+      const uid = String(stored.data()?.uid || "");
+      const eventId = req.header("x-razorpay-event-id") || "";
+      if (eventId) {
+        const eventRef = db.collection("billingWebhookEvents").doc(eventId);
+        if ((await eventRef.get()).exists) { res.status(200).json({ received: true, duplicate: true }); return; }
+        await eventRef.set({ event: event.event || "unknown", receivedAt: FieldValue.serverTimestamp() });
+      }
+      const eventName = String(event.event || "");
+      const remoteStatus = String(subscription?.status || "");
+      const activeEvent = ["subscription.authenticated", "subscription.activated", "subscription.charged"].includes(eventName);
+      const inactiveEvent = ["subscription.cancelled", "subscription.halted", "subscription.completed", "subscription.expired"].includes(eventName);
+      if (activeEvent || inactiveEvent) {
+        const status = activeEvent ? (remoteStatus || "active") : (remoteStatus || eventName.split(".")[1] || "inactive");
+        const periodEnd = subscription?.current_end ? subscription.current_end * 1000 : Number(stored.data()?.currentPeriodEnd || 0);
+        const state = { uid, subscriptionId, status, currentPeriodEnd: periodEnd || null, updatedAt: FieldValue.serverTimestamp() };
+        await Promise.all([
+          subscriptionRef.set(state, { merge: true }),
+          db.collection("users").doc(uid).collection("billing").doc("current").set(state, { merge: true }),
+        ]);
+      }
+      res.status(200).json({ received: true });
+    } catch {
+      res.status(500).send("Webhook processing failed.");
+    }
+  });
+
 
   // Real-Time Streaming Endpoint (SSE)
   app.post("/api/jarvis/stream", async (req: Request, res: Response) => {
