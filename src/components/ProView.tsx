@@ -46,6 +46,7 @@ interface ProViewProps {
     glowIntensity: number;
   }) => void;
   onPurchasePro: (plan: "monthly" | "quarterly") => Promise<void>;
+  onCancelPro: () => Promise<void>;
   onToggleAutoLockdown: () => void;
   onToggleNotifications: () => void;
   onSendTestNotification: () => void;
@@ -78,6 +79,7 @@ export const ProView: React.FC<ProViewProps> = ({
   onSelectTheme,
   onApplyCustomTheme,
   onPurchasePro,
+  onCancelPro,
   onToggleAutoLockdown,
   onToggleNotifications,
   onSendTestNotification,
@@ -125,6 +127,7 @@ export const ProView: React.FC<ProViewProps> = ({
   const [selectedPlan, setSelectedPlan] = useState<"monthly" | "quarterly">("quarterly");
   const [isCheckoutDrawerOpen, setIsCheckoutDrawerOpen] = useState(false);
   const [billingBusy, setBillingBusy] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
 
   const selectedPlanAmount = selectedPlan === "monthly" ? 39 : 99;
@@ -481,6 +484,18 @@ export const ProView: React.FC<ProViewProps> = ({
     setSelectedPlan(activePlan);
     setBillingError(null);
     setIsCheckoutDrawerOpen(true);
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!window.confirm("Cancel automatic renewal for Kharchee Pro? You will keep access until the current paid period ends.")) return;
+    setIsCancelling(true);
+    try {
+      await onCancelPro();
+    } catch (error) {
+      onShowToast?.(error instanceof Error ? error.message : "Could not cancel the subscription.");
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const handleSecurePurchase = async () => {
@@ -879,8 +894,9 @@ export const ProView: React.FC<ProViewProps> = ({
         {/* Champagne Gold Inline Trigger Button */}
         <button
           type="button"
+          disabled={isProActive}
           onClick={() => handleOpenCheckoutDrawer(selectedPlan)}
-          className="relative overflow-hidden w-full min-h-[48px] rounded-xl text-xs uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-black font-extrabold tracking-wider border border-amber-100/70 shadow-[0_0_25px_rgba(251,191,36,0.45),inset_0_1px_1px_rgba(255,255,255,0.75)] hover:brightness-105 group"
+          className="relative overflow-hidden w-full min-h-[48px] rounded-xl text-xs uppercase flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-black font-extrabold tracking-wider border border-amber-100/70 shadow-[0_0_25px_rgba(251,191,36,0.45),inset_0_1px_1px_rgba(255,255,255,0.75)] hover:brightness-105 group disabled:cursor-not-allowed disabled:opacity-60"
         >
           {/* Continuous soft light reflection animation */}
           <span
@@ -888,9 +904,26 @@ export const ProView: React.FC<ProViewProps> = ({
             className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/75 to-transparent skew-x-[-25deg] animate-[pulse_2s_ease-in-out_infinite] group-hover:translate-x-[320%] transition-transform duration-1000"
           />
           <Crown className="w-4 h-4 fill-black text-black relative z-10 shrink-0" />
-          <span className="relative z-10">{selectedPlanCtaLabel}</span>
+          <span className="relative z-10">{isProActive ? "PRO SUBSCRIPTION ACTIVE" : selectedPlanCtaLabel}</span>
         </button>
       </section>
+
+      {isProActive && (
+        <div className="flex flex-col gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/[.04] p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold text-emerald-200">Subscription verified</p>
+            <p className="mt-0.5 text-[10px] text-slate-400">Manage renewal for the current Pro plan.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleCancelSubscription()}
+            disabled={isCancelling}
+            className="rounded-lg border border-slate-300/20 bg-white/[.04] px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/[.08] disabled:opacity-50"
+          >
+            {isCancelling ? "Cancelling…" : "Cancel auto-renewal"}
+          </button>
+        </div>
+      )}
 
       {isProActive ? (
         <>
