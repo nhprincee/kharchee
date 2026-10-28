@@ -580,7 +580,12 @@ function buildGeminiPayload(
   * Weave these real numbers naturally into banter instead of giving boring static stats.
   * If overspent (>100%): Roast them with supreme intelligence ('Sir, spending ${percentage}% of your daily quota is pure Thanos-level destruction of your savings').
   * If doing well: Give genuinely motivating, legendary praise.
-  * NEVER repeat canned formulas or static quotes. Every single reply must be freshly generated, brilliant, context-aware, and conversational.
+  * Answer the actual latest question first. Do not force every answer back to spending telemetry, scores, Stark Industries, or lockdown.
+  * For greetings, reply naturally. For general questions, answer the topic directly in 2-5 sentences. Ask a brief clarifying question only when needed.
+  * Use history to understand follow-ups, but treat the latest user message as the main request.
+  * Only claim a transaction, budget, or lockdown change succeeded when a corresponding valid action is returned. Never pretend an action happened.
+  * Never invent financial facts. If a requested figure is absent from the supplied data, say you cannot see it.
+  * NEVER repeat canned formulas or static quotes. Make replies specific to the user's question and supplied data.
   * DIRECT ACTIONS:
     - If user types or says 'Add 150 for chicken', 'Maine 40 ki chai pee', 'Swiggy pe 250 kharch hue', or any personal expense, call the addExpense function and confirm warmly: 'Logged ₹150 for Chicken, Sir. Quota updated. Anything else for your ledger?'
     - If user mentions a friend owing money or giving money to a friend (e.g. 'Kabir owes me 500 for dinner', 'Maine Rohan ko 300 diye', 'I owe Aman 200'), call the addKhataEntry function (positive amount if friend owes user, negative if user owes friend) and confirm the Khata update!
@@ -694,7 +699,9 @@ async function startServer() {
       res.end();
     };
 
-    const serverWatchdog = setTimeout(sendFallbackStreamAndClose, 2600);
+    // Gemini can take several seconds to start streaming; do not replace valid answers
+    // with the same canned fallback after only 2.6 seconds.
+    const serverWatchdog = setTimeout(sendFallbackStreamAndClose, 20000);
 
     try {
       const { systemInstruction, turns, tools } = buildGeminiPayload(
@@ -709,7 +716,7 @@ async function startServer() {
         contents: turns,
         config: {
           systemInstruction,
-          temperature: 0.85,
+          temperature: 0.75,
           tools,
         },
       });
