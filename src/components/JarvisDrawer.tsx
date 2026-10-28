@@ -33,12 +33,12 @@ interface JarvisDrawerProps {
 }
 
 const QUICK_QUESTION_CHIPS = [
-  { label: "Kabir owes me 500 for dinner", icon: "🤝" },
-  { label: "Maine Rohan ko 300 diye", icon: "💸" },
-  { label: "Add 150 for diet", icon: "🍗" },
-  { label: "Maine 40 ki chai pee", icon: "☕" },
-  { label: "Mera score kaisa hai?", icon: "🛡️" },
-  { label: "Lockdown activate kar do", icon: "🚨" },
+  { label: "A friend owes me ₹500 for dinner", icon: "🤝" },
+  { label: "I paid a friend ₹300", icon: "💸" },
+  { label: "Add ₹150 for food", icon: "🍗" },
+  { label: "I spent ₹40 on chai", icon: "☕" },
+  { label: "Explain my spending", icon: "🛡️" },
+  { label: "Set my daily budget", icon: "🎯" },
 ];
 
 export const HolographicAudioSpectrum: React.FC<{
@@ -125,7 +125,7 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
     {
       id: "jarvis-welcome",
       role: "jarvis",
-      text: `At your service, Sir. Perimeter secure. Telemetry indicates ₹${todaySpent} deployed out of ₹${dailyLimit}.`,
+      text: "Hi, I’m Jarvis. Ask me about your spending, add a transaction, update your budget, or manage your Khata.",
       timestamp: new Date().toISOString(),
       mode: "roast",
     },
@@ -157,7 +157,7 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
         !window.speechSynthesis.speaking
       ) {
         speakWithBrowserFallback(
-          "At your service, Sir. Perimeter secure.",
+          "Hi, I’m Jarvis. What would you like help with today?",
           "jarvis-boot-greeting"
         );
       } else {
@@ -488,14 +488,10 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
     const { dailyLimit: lim, todaySpent: spent, percentUsed: pct } = snapshot;
 
     if (q.includes("score")) {
-      return `Your CRED Discipline Score is calibrated at ${snapshot.disciplineScore}/900, Boss. ${
-        pct > 100
-          ? "Today's breach creates slight resistance, but tomorrow's clean slate will restore momentum."
-          : "Your perimeter defense is pristine—maintaining top 5% financial discipline."
-      }`;
+      return `Your current in-app discipline estimate is ${snapshot.disciplineScore}/900. It is based on the app's budget activity, not an official credit score. ${pct > 100 ? "Today’s spending is above your set budget." : "Add accurate transactions over time to make the insights more useful."}`;
     }
 
-    return `Understood, Sir. Monitoring ₹${spent} against your ₹${lim} quota. Non-essential outlays are being suppressed.`;
+    return `I’m here to help with your money, not guess. Your logged spending today is ₹${spent} against a ₹${lim} daily budget. Ask me a specific question or tell me what transaction to add.`;
   };
 
   const executeJarvisAction = (action: {
