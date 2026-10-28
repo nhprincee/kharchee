@@ -41,6 +41,7 @@ interface ProfileDrawerProps {
   onOpenRewardVault?: () => void;
   onExportBackup?: () => void;
   onImportBackup?: (file: File) => void;
+  onSignOut?: () => void | Promise<void>;
 }
 
 function scopedProfileKey(key: string): string {
@@ -67,6 +68,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   onOpenRewardVault,
   onExportBackup,
   onImportBackup,
+  onSignOut,
 }) => {
   const backupInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -77,6 +79,9 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   });
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(userName);
+  const authEmail = localStorage.getItem(scopedProfileKey("kharche_auth_email_v1")) || localStorage.getItem(scopedProfileKey("kharche_user_email_v1")) || "";
+  const authPhone = localStorage.getItem(scopedProfileKey("kharche_auth_phone_v1")) || "";
+  const userInitials = userName.trim().split(/\\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "K";
 
   
 
@@ -270,7 +275,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
               {/* Golden Elite Club Member Pill */}
               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-[9px] uppercase tracking-wider shadow-lg border border-yellow-200">
                 <Crown className="w-3 h-3 stroke-[3]" />
-                <span>ELITE CLUB</span>
+                <span>PERSONAL ACCOUNT</span>
               </div>
             </div>
 
@@ -326,24 +331,23 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                 </form>
               )}
 
-              {/* Registered Contact Info with Verified Checkmark Badges */}
-              <div className="flex flex-col items-center gap-1 mt-1 text-[11px] text-slate-400 font-mono">
+              {/* Verified contact details from the active sign-in */}
+              <div className="mt-1 flex flex-col items-center gap-1 text-[11px] text-slate-400">
                 <div className="flex items-center gap-1.5">
-                  <Mail className="w-3 h-3 text-slate-500" />
-                  <span>mrigandersinghrajput@gmail.com</span>
-                  <span className="flex items-center gap-0.5 text-[9px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-1.5 py-0.2 rounded-full">
-                    <CheckCircle2 className="w-2.5 h-2.5" />
-                    Verified
-                  </span>
+                  <Mail className="h-3 w-3 text-slate-500" />
+                  <span>{authEmail || "Email not connected"}</span>
+                  {authEmail && <span className="rounded-full border border-slate-400/20 px-1.5 py-0.5 text-[9px] font-bold text-slate-300">Verified</span>}
                 </div>
-                <div className="flex items-center gap-1.5 text-slate-500">
-                  <Phone className="w-3 h-3" />
-                  <span>+91 98000 00000</span>
-                  <span className="flex items-center gap-0.5 text-[9px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-1.5 py-0.2 rounded-full">
-                    <CheckCircle2 className="w-2.5 h-2.5" />
-                    Secured
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  <Phone className="h-3 w-3 text-slate-500" />
+                  <span>{authPhone || "Phone not connected"}</span>
+                  {authPhone && <span className="rounded-full border border-slate-400/20 px-1.5 py-0.5 text-[9px] font-bold text-slate-300">Verified</span>}
                 </div>
+                {onSignOut && (
+                  <button type="button" onClick={() => { void onSignOut(); }} className="mt-2 inline-flex items-center gap-2 rounded-xl border border-slate-400/20 bg-white/[0.035] px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:border-slate-300/40 hover:text-white">
+                    <LogOut className="h-3.5 w-3.5" /> Sign out
+                  </button>
+                )}
               </div>
 
               {/* Pinned Stark Arc Badges Showcase directly on Profile Card */}
