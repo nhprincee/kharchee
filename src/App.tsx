@@ -198,7 +198,7 @@ export function App() {
           return parsed.filter(isValidExpenseRecord);
         }
       } catch {
-        return createInitialExpenses();
+        return [];
       }
     }
     return createInitialExpenses();
@@ -213,7 +213,7 @@ export function App() {
           return parsed.filter(isValidKhataFriend);
         }
       } catch {
-        return createInitialKhata();
+        return [];
       }
     }
     return createInitialKhata();
@@ -225,10 +225,7 @@ export function App() {
 
   const [themeId, setThemeId] = useState<ThemeId>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.theme);
-    if (saved && saved in FAN_THEMES) {
-      return saved as ThemeId;
-    }
-    return "avengers";
+    return "stark";
   });
 
   const [customThemeOverride, setCustomThemeOverride] = useState<{
@@ -1721,7 +1718,7 @@ export function App() {
               </section>
 
               {/* FAN-ZONE THEMES */}
-              <section id="tour-themes-bar" aria-label="Fan-Zone Themes" className="space-y-3 pt-2">
+              <section id="tour-themes-bar" aria-label="Appearance" className="space-y-3 pt-2">
                 <div className="flex items-center justify-between px-1">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Accent &amp; Club Themes
@@ -2184,7 +2181,7 @@ export function App() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Select Fan-Zone Theme"
+            aria-label="Select Appearance"
             onClick={() => setIsThemeModalOpen(false)}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
           >
