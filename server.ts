@@ -470,10 +470,10 @@ function buildDynamicJarvisReply(
       : "No expenses logged today yet";
 
   if (p.includes("score")) {
-    return `Your CRED-style Discipline Score stands at ${score}/900, Boss. ${
+    return `Your in-app spending-discipline estimate is ${score}/900. This is not a CIBIL or official credit score. ${
       pct > 100
-        ? "Today's overspending is exerting downward pressure, but you can stabilize it with a strong no-spend recovery tomorrow."
-        : "Your consistency and perimeter defense keep you in the top tier of disciplined spenders."
+        ? "Your logged spending is above the daily budget you set."
+        : "As you log real transactions, the app can give you more useful habit insights."
     }`;
   }
 
@@ -484,16 +484,84 @@ function buildDynamicJarvisReply(
   }
 
   if (pct > 100) {
-    return `Sir, spending ${pct}% of your daily quota (₹${spent} against ₹${limit}) is pure Thanos-level destruction of your savings. We have breached by ₹${Math.abs(
-      rem
-    )}. I strongly advise locking the perimeter before further damage occurs!`;
+    return `You have exceeded your daily budget by ₹${Math.abs(rem)} (₹${spent} spent against ₹${limit}). You could pause non-essential spending for the rest of today.`;
   }
 
   if (pct >= 70) {
-    return `Perimeter alert, Boss: you have deployed ₹${spent} today (${pct}% of quota), leaving ₹${rem} in reserve. Recent logs show ${recentList}. Tread carefully into the evening.`;
+    return `You have logged ₹${spent} today (${pct}% of your ₹${limit} budget), leaving ₹${rem}. Recent entries: ${recentList}.`;
   }
 
-  return `Systems nominal, Sir! You have deployed ₹${spent} today with a solid ₹${rem} intact in reserve (${pct}% used). Exemplary financial discipline worthy of Stark Industries. How may I assist your mission?`;
+  return `You have logged ₹${spent} today against a daily budget of ₹${limit}, leaving ₹${rem}. What would you like to check or record?`;
+}
+
+async function getOpenAIJarvisReply(
+  prompt: string,
+  snapshot?: FinancialSnapshot,
+  mode?: "roast" | "advice",
+  history: ClientChatMessage[] = []
+): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
+
+  const snapshotSummary = snapshot
+    ? JSON.stringify({
+        dailyLimit: snapshot.dailyLimit,
+        todaySpent: snapshot.todaySpent,
+        remaining: snapshot.remaining,
+        percentUsed: snapshot.percentUsed,
+        lockdownActive: snapshot.lockdownActive,
+        streakDays: snapshot.streakDays,
+        disciplineScore: snapshot.disciplineScore,
+        recentExpenses: snapshot.recentExpenses,
+        khataToReceive: snapshot.khataToReceive,
+        khataToPay: snapshot.khataToPay,
+      })
+    : "No financial snapshot available.";
+
+  const messages = [
+    {
+      role: "system",
+      content: [
+        "You are Jarvis, the helpful AI assistant inside Kharchee, a personal finance app.",
+        "Answer the user's latest question directly. Understand Hindi, Hinglish, and English; naturally mirror the user's language.",
+        "Be clear, practical, concise, and friendly. A little dry wit is fine, but never force movie references, 'Sir/Boss', fake telemetry, or dramatic roleplay.",
+        "Use only the supplied financial snapshot. Never invent transactions, balances, names, credit ratings, or actions.",
+        "The disciplineScore is an app-generated habit estimate, not a CIBIL score or lender-issued credit score; explain that distinction whenever relevant.",
+        "Never claim that an action was completed merely because the user asked. The app executes separately detected actions; only describe the requested action, and do not claim other side effects.",
+        "If there is no logged data, say so plainly and ask what the user wants to add. Never shame the user about money.",
+        `Response style: ${mode === "advice" ? "supportive, thoughtful, actionable" : "casual, lightly witty, never insulting"}.`,
+        `Current financial snapshot: ${snapshotSummary}`,
+      ].join("\n"),
+    },
+    ...history.slice(-8).map((message) => ({
+      role: message.role === "jarvis" ? "assistant" : "user",
+      content: String(message.text || "").slice(0, 1500),
+    })),
+    { role: "user", content: prompt },
+  ];
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MODEL || "gpt-4o",
+      messages,
+      temperature: 0.65,
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`OpenAI request failed (${response.status}): ${detail.slice(0, 240)}`);
+  }
+
+  const payload = await response.json() as {
+    choices?: Array<{ message?: { content?: string | null } }>;
+  };
+  return payload.choices?.[0]?.message?.content?.trim() || "";
 }
 
 const GEMINI_TEXT_MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
@@ -574,7 +642,7 @@ function buildGeminiPayload(
   * Percentage: ${percentage}%
   * Recent Expenses: ${recentList}
   * Khata Debts: ${khataList}
-  * CRED Discipline Score: ${disciplineScore} / 900
+  * In-app spending-discipline estimate: ${disciplineScore} / 900 (not a CIBIL or official credit score)
   * Emergency Lockdown: ${lockdownActive ? "ACTIVE (Frozen)" : "Inactive"}
 - Directives:
   * Weave these real numbers naturally into banter instead of giving boring static stats.
@@ -591,7 +659,7 @@ function buildGeminiPayload(
     - If user mentions a friend owing money or giving money to a friend (e.g. 'Kabir owes me 500 for dinner', 'Maine Rohan ko 300 diye', 'I owe Aman 200'), call the addKhataEntry function (positive amount if friend owes user, negative if user owes friend) and confirm the Khata update!
     - If user asks to activate or remove Emergency Lockdown, call setEmergencyLockdown.
     - If user asks to change or set daily budget/limit, call setDailyLimit.
-    - If user asks 'Mera score kaisa hai', review their CRED Discipline Score (${disciplineScore}/900).
+    - If user asks about their score, explain the app-generated spending-discipline estimate (${disciplineScore}/900); never call it a real credit score.
 - Response Style: Crisp, lively, intelligent, with real personality. Keep it to 2-4 punchy sentences so it's enjoyable to read and speak aloud. No markdown asterisk lists or robotic apologies.`;
 
   const turns: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> = [];
@@ -663,6 +731,26 @@ async function startServer() {
       .trim()
       .slice(0, 1000);
     const preDetectedAction = extractIntentAction(userPrompt);
+
+    if (process.env.OPENAI_API_KEY?.trim()) {
+      try {
+        const reply = await getOpenAIJarvisReply(userPrompt, snapshot, mode, history);
+        const text = reply || buildDynamicJarvisReply(userPrompt, snapshot, preDetectedAction);
+        if (preDetectedAction) res.write(`data: ${JSON.stringify({ type: "action", action: preDetectedAction })}\n\n`);
+        for (let offset = 0; offset < text.length; offset += 42) {
+          const piece = text.slice(offset, offset + 42);
+          res.write(`data: ${JSON.stringify({ type: "chunk", text: piece })}\n\n`);
+        }
+        res.write(`data: ${JSON.stringify({ type: "done", fullText: text, source: "openai-gpt-4o" })}\n\n`);
+        res.end();
+      } catch {
+        const message = "Jarvis couldn’t connect to GPT-4o. Check the server’s OPENAI_API_KEY and API access.";
+        res.write(`data: ${JSON.stringify({ type: "chunk", text: message })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "done", fullText: message, source: "openai-error" })}\n\n`);
+        res.end();
+      }
+      return;
+    }
 
     const ai = getGenAIClient();
     if (!ai) {
@@ -844,6 +932,18 @@ async function startServer() {
       .trim()
       .slice(0, 1000);
     const preDetectedAction = extractIntentAction(userPrompt);
+
+    if (process.env.OPENAI_API_KEY?.trim()) {
+      try {
+        const reply = await getOpenAIJarvisReply(userPrompt, snapshot, mode, history);
+        const text = reply || buildDynamicJarvisReply(userPrompt, snapshot, preDetectedAction);
+        res.status(200).json({ response: text, reply: text, action: preDetectedAction, source: "openai-gpt-4o" });
+      } catch {
+        const message = "Jarvis couldn’t connect to GPT-4o. Check the server’s OPENAI_API_KEY and API access.";
+        res.status(503).json({ response: message, reply: message, action: null, source: "openai-error" });
+      }
+      return;
+    }
 
     const ai = getGenAIClient();
     if (!ai) {

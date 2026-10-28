@@ -51,6 +51,7 @@ import { KhataView } from "./components/KhataView";
 import { ProView } from "./components/ProView";
 import { JarvisDrawer } from "./components/JarvisDrawer";
 import { ProfileDrawer } from "./components/ProfileDrawer";
+import { signOutCurrentUser } from "./components/AuthGate";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { AppTour } from "./components/AppTour";
 import { ProTrialModal } from "./components/ProTrialModal";
@@ -63,6 +64,11 @@ import {
   requestNotificationPermission,
   sendKharcheNotification,
 } from "./utils/notifications";
+
+function scopedStorageKey(key: string): string {
+  const uid = localStorage.getItem("kharche_current_user_uid") || "unverified";
+  return `${uid}:${key}`;
+}
 
 const STORAGE_KEYS = {
   expenses: "kharche_expenses_v1",
@@ -181,7 +187,7 @@ export function App() {
 
   // Persistent State
   const [dailyLimit, setDailyLimit] = useState<number>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.dailyLimit);
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.dailyLimit));
     const parsed = saved ? Number(saved) : NaN;
     if (Number.isFinite(parsed) && parsed >= 50 && parsed <= 1000000) {
       return Math.round(parsed);
@@ -190,7 +196,7 @@ export function App() {
   });
 
   const [expenses, setExpenses] = useState<Expense[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.expenses);
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.expenses));
     if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
@@ -198,14 +204,14 @@ export function App() {
           return parsed.filter(isValidExpenseRecord);
         }
       } catch {
-        return createInitialExpenses();
+        return [];
       }
     }
     return createInitialExpenses();
   });
 
   const [khataFriends, setKhataFriends] = useState<KhataFriend[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.khata);
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.khata));
     if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
@@ -213,22 +219,19 @@ export function App() {
           return parsed.filter(isValidKhataFriend);
         }
       } catch {
-        return createInitialKhata();
+        return [];
       }
     }
     return createInitialKhata();
   });
 
   const [lockdownActive, setLockdownActive] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEYS.lockdown) === "true";
+    return localStorage.getItem(scopedStorageKey(STORAGE_KEYS.lockdown)) === "true";
   });
 
   const [themeId, setThemeId] = useState<ThemeId>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.theme);
-    if (saved && saved in FAN_THEMES) {
-      return saved as ThemeId;
-    }
-    return "avengers";
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.theme));
+    return "stark";
   });
 
   const [customThemeOverride, setCustomThemeOverride] = useState<{
@@ -241,25 +244,25 @@ export function App() {
     // Payment Verification Safeguard: 12-digit UTR format check is not payment verification.
     // Client-side strings or flags do not grant paid Pro access.
     // Preserved 3-Day Free Trial provides legitimate feature access.
-    const trialClaimed = localStorage.getItem("kharche_pro_trial_v1") === "claimed";
-    const expiresAtRaw = localStorage.getItem("kharche_pro_trial_expires_at_v1");
+    const trialClaimed = localStorage.getItem(scopedStorageKey("kharche_pro_trial_v1")) === "claimed";
+    const expiresAtRaw = localStorage.getItem(scopedStorageKey("kharche_pro_trial_expires_at_v1"));
     if (trialClaimed || expiresAtRaw) {
       const expiresAt = Number(expiresAtRaw || 0);
       if (Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() <= expiresAt) {
         return true;
       }
-      localStorage.setItem(STORAGE_KEYS.pro, "false");
+      localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), "false");
       return false;
     }
     return false;
   });
 
   const [autoLockdownAt90, setAutoLockdownAt90] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEYS.autoLockdown) === "true";
+    return localStorage.getItem(scopedStorageKey(STORAGE_KEYS.autoLockdown)) === "true";
   });
 
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.notifications);
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.notifications));
     return saved !== null ? saved === "true" : true;
   });
 
@@ -278,7 +281,7 @@ export function App() {
   const [isRewardVaultOpen, setIsRewardVaultOpen] = useState(false);
   const [unlockedBadgeIds, setUnlockedBadgeIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem("kharche_stark_unlocked_badges_v1");
+      const saved = localStorage.getItem(scopedStorageKey("kharche_stark_unlocked_badges_v1"));
       return saved ? JSON.parse(saved) : ["iron-discipline", "zero-leak-legend"];
     } catch {
       return ["iron-discipline", "zero-leak-legend"];
@@ -286,21 +289,21 @@ export function App() {
   });
   const [pinnedBadgeIds, setPinnedBadgeIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem("kharche_stark_pinned_badges_v1");
+      const saved = localStorage.getItem(scopedStorageKey("kharche_stark_pinned_badges_v1"));
       return saved ? JSON.parse(saved) : ["iron-discipline", "zero-leak-legend"];
     } catch {
       return ["iron-discipline", "zero-leak-legend"];
     }
   });
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEYS.onboarding) !== "true";
+    return localStorage.getItem(scopedStorageKey(STORAGE_KEYS.onboarding)) !== "true";
   });
   const [isTourActive, setIsTourActive] = useState(false);
   const [isProTeaserOpen, setIsProTeaserOpen] = useState(false);
 
   // Feature 4: "STEALTH ZERO-BALANCE SHIELD" (Privacy Toggle)
   const [stealthMode, setStealthMode] = useState<boolean>(() => {
-    return localStorage.getItem("kharche_stealth_mode_v1") === "true";
+    return localStorage.getItem(scopedStorageKey("kharche_stealth_mode_v1")) === "true";
   });
 
   // Feature 5: "BIOMETRIC HUD SCANNER ON BOOT" (1.5-second cyan thumbprint laser-scan)
@@ -390,12 +393,12 @@ export function App() {
   const handleUnlockAndPinBadge = (badgeId: string) => {
     setUnlockedBadgeIds((prev) => {
       const next = prev.includes(badgeId) ? prev : [...prev, badgeId];
-      localStorage.setItem("kharche_stark_unlocked_badges_v1", JSON.stringify(next));
+      localStorage.setItem(scopedStorageKey("kharche_stark_unlocked_badges_v1"), JSON.stringify(next));
       return next;
     });
     setPinnedBadgeIds((prev) => {
       const next = prev.includes(badgeId) ? prev : [...prev, badgeId];
-      localStorage.setItem("kharche_stark_pinned_badges_v1", JSON.stringify(next));
+      localStorage.setItem(scopedStorageKey("kharche_stark_pinned_badges_v1"), JSON.stringify(next));
       return next;
     });
     const badgeObj = STARK_ARC_BADGES.find((b) => b.id === badgeId);
@@ -409,7 +412,7 @@ export function App() {
       const next = prev.includes(badgeId)
         ? prev.filter((id) => id !== badgeId)
         : [...prev, badgeId];
-      localStorage.setItem("kharche_stark_pinned_badges_v1", JSON.stringify(next));
+      localStorage.setItem(scopedStorageKey("kharche_stark_pinned_badges_v1"), JSON.stringify(next));
       return next;
     });
   };
@@ -460,7 +463,7 @@ export function App() {
 
   // Receiving UPI ID (Khata Direct Settlement)
   const [myUpiId, setMyUpiId] = useState<string>(() => {
-    return localStorage.getItem("kharche_my_upi_id_v1") || "mrigander@upi";
+    return localStorage.getItem(scopedStorageKey("kharche_my_upi_id_v1")) || "";
   });
 
   // Global Smart Clipboard & SMS Auto-Detection State
@@ -500,9 +503,9 @@ export function App() {
 
   useEffect(() => {
     const todayKey = new Date().toDateString();
-    const lastBriefedDate = localStorage.getItem("kharche_morning_briefing_date_v1");
+    const lastBriefedDate = localStorage.getItem(scopedStorageKey("kharche_morning_briefing_date_v1"));
     if (lastBriefedDate !== todayKey) {
-      localStorage.setItem("kharche_morning_briefing_date_v1", todayKey);
+      localStorage.setItem(scopedStorageKey("kharche_morning_briefing_date_v1"), todayKey);
       triggerStarkMorningBriefing(dailyLimit);
     }
   }, []);
@@ -521,39 +524,39 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.dailyLimit, String(dailyLimit));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(dailyLimit));
   }, [dailyLimit]);
 
   useEffect(() => {
-    localStorage.setItem("kharche_my_upi_id_v1", myUpiId);
+    localStorage.setItem(scopedStorageKey("kharche_my_upi_id_v1"), myUpiId);
   }, [myUpiId]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(expenses));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.expenses), JSON.stringify(expenses));
   }, [expenses]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.khata, JSON.stringify(khataFriends));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.khata), JSON.stringify(khataFriends));
   }, [khataFriends]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.lockdown, String(lockdownActive));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.lockdown), String(lockdownActive));
   }, [lockdownActive]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.theme, themeId);
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.theme), themeId);
   }, [themeId]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.pro, String(isProActive));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(isProActive));
   }, [isProActive]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.autoLockdown, String(autoLockdownAt90));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.autoLockdown), String(autoLockdownAt90));
   }, [autoLockdownAt90]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.notifications, String(notificationsEnabled));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.notifications), String(notificationsEnabled));
   }, [notificationsEnabled]);
 
   /**
@@ -770,11 +773,11 @@ export function App() {
     dailyLimit: number;
     notificationsEnabled: boolean;
   }) => {
-    localStorage.setItem(STORAGE_KEYS.onboarding, "true");
-    localStorage.setItem("kharche_user_name_v1", data.userName);
-    localStorage.setItem("kharche_user_email_v1", data.email);
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.onboarding), "true");
+    localStorage.setItem(scopedStorageKey("kharche_user_name_v1"), data.userName);
+    localStorage.setItem(scopedStorageKey("kharche_user_email_v1"), data.email);
     localStorage.setItem(
-      STORAGE_KEYS.financialProfile,
+          scopedStorageKey(STORAGE_KEYS.financialProfile),
       JSON.stringify({
         income: data.monthlyIncome,
         savings: data.savingsTarget,
@@ -782,9 +785,9 @@ export function App() {
       })
     );
     setDailyLimit(data.dailyLimit);
-    localStorage.setItem(STORAGE_KEYS.dailyLimit, String(data.dailyLimit));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(data.dailyLimit));
     setNotificationsEnabled(data.notificationsEnabled);
-    localStorage.setItem(STORAGE_KEYS.notifications, String(data.notificationsEnabled));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.notifications), String(data.notificationsEnabled));
 
     setIsOnboardingOpen(false);
     // Transition to Interactive App Tour
@@ -806,9 +809,9 @@ export function App() {
   const handleClaimProTrial = () => {
     const expiresAt = Date.now() + 72 * 60 * 60 * 1000;
     setIsProActive(true);
-    localStorage.setItem(STORAGE_KEYS.pro, "true");
-    localStorage.setItem("kharche_pro_trial_v1", "claimed");
-    localStorage.setItem("kharche_pro_trial_expires_at_v1", String(expiresAt));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), "true");
+    localStorage.setItem(scopedStorageKey("kharche_pro_trial_v1"), "claimed");
+    localStorage.setItem(scopedStorageKey("kharche_pro_trial_expires_at_v1"), String(expiresAt));
     setIsProTeaserOpen(false);
     showToast("🎉 3-Day PRO Black Trial Activated (72h)! All themes & AI uncapped");
   };
@@ -975,9 +978,9 @@ export function App() {
 
   const handleResetAllExpenses = () => {
     setExpenses([]);
-    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify([]));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.expenses), JSON.stringify([]));
     setLockdownActive(false);
-    localStorage.setItem(STORAGE_KEYS.lockdown, "false");
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.lockdown), "false");
     showToast("All expense records cleared");
   };
 
@@ -1022,7 +1025,7 @@ export function App() {
     const newFriend: KhataFriend = {
       id: `fr-${Date.now()}`,
       name,
-      phone: phone.replace(/\D/g, "") || "919800000000",
+      phone: phone.replace(/\D/g, "") || "",
       avatarInitials: initials || "FR",
       upiId: upiId || undefined,
       entries: [
@@ -1143,7 +1146,7 @@ export function App() {
       myUpiId,
       themeId,
       isProActive,
-      proUtr: localStorage.getItem("kharche_pro_utr_v1") || "",
+      proUtr: localStorage.getItem(scopedStorageKey("kharche_pro_utr_v1")) || "",
       lockdownActive,
       autoLockdownAt90,
       unlockedBadgeIds,
@@ -1202,12 +1205,12 @@ export function App() {
           }
           validExpensesCount = validatedExpenses.length;
           setExpenses(validatedExpenses);
-          localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(validatedExpenses));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.expenses), JSON.stringify(validatedExpenses));
         }
         if (Array.isArray(parsed.khataFriends)) {
           const validatedFriends = parsed.khataFriends.filter(isValidKhataFriend);
           setKhataFriends(validatedFriends);
-          localStorage.setItem(STORAGE_KEYS.khata, JSON.stringify(validatedFriends));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.khata), JSON.stringify(validatedFriends));
         }
         if (
           typeof parsed.dailyLimit === "number" &&
@@ -1216,36 +1219,34 @@ export function App() {
           parsed.dailyLimit <= 1000000
         ) {
           setDailyLimit(Math.round(parsed.dailyLimit));
-          localStorage.setItem(STORAGE_KEYS.dailyLimit, String(Math.round(parsed.dailyLimit)));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(Math.round(parsed.dailyLimit)));
         }
-        if (typeof parsed.themeId === "string" && parsed.themeId in FAN_THEMES) {
-          setThemeId(parsed.themeId as ThemeId);
-          localStorage.setItem(STORAGE_KEYS.theme, parsed.themeId);
-        }
+        setThemeId("stark");
+        localStorage.setItem(scopedStorageKey(STORAGE_KEYS.theme), "stark");
         if (typeof parsed.lockdownActive === "boolean") {
           setLockdownActive(parsed.lockdownActive);
-          localStorage.setItem(STORAGE_KEYS.lockdown, String(parsed.lockdownActive));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.lockdown), String(parsed.lockdownActive));
         }
         if (typeof parsed.autoLockdownAt90 === "boolean") {
           setAutoLockdownAt90(parsed.autoLockdownAt90);
-          localStorage.setItem(STORAGE_KEYS.autoLockdown, String(parsed.autoLockdownAt90));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.autoLockdown), String(parsed.autoLockdownAt90));
         }
         if (typeof parsed.myUpiId === "string" && parsed.myUpiId.includes("@")) {
           setMyUpiId(parsed.myUpiId.trim());
-          localStorage.setItem("kharche_my_upi_id_v1", parsed.myUpiId.trim());
+          localStorage.setItem(scopedStorageKey("kharche_my_upi_id_v1"), parsed.myUpiId.trim());
         }
         const cleanedBackupUtr =
           typeof parsed.proUtr === "string" ? parsed.proUtr.trim() : "";
         if (/^\d{12}$/.test(cleanedBackupUtr)) {
-          localStorage.setItem("kharche_pro_submitted_utr_v1", cleanedBackupUtr);
+          localStorage.setItem(scopedStorageKey("kharche_pro_submitted_utr_v1"), cleanedBackupUtr);
         }
         // Pro access is strictly tied to valid trial period, not unverified UTR strings
-        const trialExpiresAtRaw = localStorage.getItem("kharche_pro_trial_expires_at_v1");
+        const trialExpiresAtRaw = localStorage.getItem(scopedStorageKey("kharche_pro_trial_expires_at_v1"));
         const isTrialValid =
-          localStorage.getItem("kharche_pro_trial_v1") === "claimed" &&
+          localStorage.getItem(scopedStorageKey("kharche_pro_trial_v1")) === "claimed" &&
           Number(trialExpiresAtRaw || 0) > Date.now();
         setIsProActive(isTrialValid);
-        localStorage.setItem(STORAGE_KEYS.pro, String(isTrialValid));
+        localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(isTrialValid));
         if (Array.isArray(parsed.unlockedBadgeIds)) {
           const cleanUnlocked = parsed.unlockedBadgeIds.filter(
             (id): id is string => typeof id === "string"
@@ -1323,11 +1324,11 @@ export function App() {
     navItems.find((item) => item.id === activeTab)?.pageTitle || "Dashboard Overview";
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 flex">
+    <div className="min-h-screen bg-[#080b12] text-slate-100 flex">
       {/* DESKTOP SIDEBAR NAVIGATION (md+ SaaS Workspace Canvas) */}
       <aside
         aria-label="Sidebar Navigation"
-        className="hidden md:flex w-64 shrink-0 flex-col justify-between bg-[#080c14] border-r border-slate-800/90 p-4 sticky top-0 h-screen z-40"
+        className="hidden md:flex w-64 shrink-0 flex-col justify-between bg-[#0b1019] border-r border-white/[0.07] p-4 sticky top-0 h-screen z-40"
       >
         <div className="space-y-6">
           {/* Brand Header */}
@@ -1387,7 +1388,7 @@ export function App() {
         </div>
 
         {/* Bottom Sidebar Actions: Quick Add & Jarvis AI Assistant */}
-        <div className="space-y-2.5 pt-4 border-t border-slate-800/80">
+        <div className="space-y-2.5 pt-4 border-t border-white/[0.07]">
           <button
             type="button"
             onClick={handleOpenAddExpenseModal}
@@ -1399,7 +1400,7 @@ export function App() {
           <button
             type="button"
             onClick={handleOpenJarvisWithBootSequence}
-            className="w-full py-2.5 px-3 rounded-xl bg-[#0c1220] hover:bg-slate-900 border border-slate-800 text-xs font-semibold text-indigo-300 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            className="w-full py-2.5 px-3 rounded-xl bg-[#101722] hover:bg-slate-900 border border-slate-800 text-xs font-semibold text-indigo-300 flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <Zap className="w-3.5 h-3.5 text-indigo-400" />
             <span>Ask J.A.R.V.I.S. AI</span>
@@ -1408,7 +1409,7 @@ export function App() {
       </aside>
 
       {/* MAIN RESPONSIVE VIEWPORT */}
-      <div className="flex-1 min-w-0 min-h-screen bg-[#070b14] flex flex-col relative overflow-x-hidden">
+      <div className="flex-1 min-w-0 min-h-screen bg-[#080b12] flex flex-col relative overflow-x-hidden">
         <ThemeBackdrop theme={theme} />
 
         {/* TOP SAAS HEADER */}
@@ -1423,7 +1424,7 @@ export function App() {
             playQuickAddChirp();
             setStealthMode((prev) => {
               const next = !prev;
-              localStorage.setItem("kharche_stealth_mode_v1", String(next));
+              localStorage.setItem(scopedStorageKey("kharche_stealth_mode_v1"), String(next));
               showToast(
                 next
                   ? "👁️‍🗨️ Stealth Zero-Balance Shield ON: ₹0.00 / Empty Vault"
@@ -1441,16 +1442,16 @@ export function App() {
         />
 
         {/* Contextual Utility Bar */}
-        <div className="px-4 sm:px-6 py-2 bg-[#080c14] border-b border-slate-800/80 flex items-center justify-between gap-2 shrink-0 relative z-30">
+        <div className="px-4 sm:px-6 py-2 bg-[#0b1019]/95 border-b border-white/[0.07] flex items-center justify-between gap-2 shrink-0 relative z-30 backdrop-blur-xl">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar whitespace-nowrap pr-1">
-            <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-[11px] font-medium text-slate-300 font-mono shrink-0">
+            <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#131c29] border border-slate-800 text-[11px] font-medium text-slate-300 font-mono shrink-0">
               {formatLiveHeaderDate(now)}
             </div>
 
             <button
               type="button"
               onClick={() => void checkClipboardForTransactions(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#131c29] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
               title="Paste Bank SMS"
             >
               <span>Paste Bank SMS</span>
@@ -1459,7 +1460,7 @@ export function App() {
             <button
               type="button"
               onClick={handleTriggerFakeMomCall}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#131c29] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
               title="Bail Me Out (Simulated Call)"
             >
               <PhoneIncoming className="w-3 h-3 text-indigo-400" />
@@ -1469,7 +1470,7 @@ export function App() {
             <button
               type="button"
               onClick={() => triggerStarkMorningBriefing(dailyLimit)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#131c29] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
               title="Morning Audio Briefing"
             >
               <span>Briefing</span>
@@ -1503,7 +1504,7 @@ export function App() {
             role="status"
             aria-label="Stark Morning Telemetry Briefing"
             onClick={() => setIsMorningBriefingOpen(false)}
-            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/50 bg-[#0c1220] shadow-xl relative z-40 animate-in fade-in slide-in-from-top-3 duration-300 cursor-pointer overflow-hidden"
+            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/50 bg-[#101722] shadow-xl relative z-40 animate-in fade-in slide-in-from-top-3 duration-300 cursor-pointer overflow-hidden"
           >
             <div className="flex items-start justify-between gap-2.5">
               <div className="flex items-center gap-2.5">
@@ -1550,7 +1551,7 @@ export function App() {
           <aside
             role="alert"
             aria-label="Detected Banking Transaction"
-            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/40 bg-[#0c1220] shadow-xl relative z-30 animate-in slide-in-from-top-2 duration-300"
+            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/40 bg-[#101722] shadow-xl relative z-30 animate-in slide-in-from-top-2 duration-300"
           >
             <div className="flex items-start justify-between gap-2.5">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1670,7 +1671,7 @@ export function App() {
                 </div>
 
                 {recentExpenses.length === 0 ? (
-                  <div className="p-8 rounded-2xl border border-slate-800 bg-[#0c1220] text-center space-y-3">
+                  <div className="p-8 rounded-2xl border border-slate-800 bg-[#101722] text-center space-y-3">
                     <p className="text-sm font-semibold text-slate-200">
                       No transactions recorded yet
                     </p>
@@ -1721,7 +1722,7 @@ export function App() {
               </section>
 
               {/* FAN-ZONE THEMES */}
-              <section id="tour-themes-bar" aria-label="Fan-Zone Themes" className="space-y-3 pt-2">
+              <section id="tour-themes-bar" aria-label="Appearance" className="space-y-3 pt-2">
                 <div className="flex items-center justify-between px-1">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Accent &amp; Club Themes
@@ -2025,12 +2026,12 @@ export function App() {
               playQuickAddChirp();
             }
             setLockdownActive(active);
-            localStorage.setItem(STORAGE_KEYS.lockdown, String(active));
+            localStorage.setItem(scopedStorageKey(STORAGE_KEYS.lockdown), String(active));
             showToast(active ? "🚨 Emergency Lockdown ACTIVATED by JARVIS" : "🛡️ Lockdown lifted by JARVIS");
           }}
           onUpdateDailyLimit={(newLimit) => {
             setDailyLimit(newLimit);
-            localStorage.setItem(STORAGE_KEYS.dailyLimit, String(newLimit));
+            localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(newLimit));
             showToast(`Daily budget set to ₹${newLimit} by JARVIS`);
           }}
           onAddKhataEntry={(friendName, amount, description) => {
@@ -2051,7 +2052,7 @@ export function App() {
             } else {
               handleAddFriendAndEntry(
                 friendName.trim(),
-                "919800000000",
+                "",
                 description,
                 amount
               );
@@ -2124,14 +2125,14 @@ export function App() {
           onClose={() => setIsProfileOpen(false)}
           onUpdateDailyLimit={(newLimit) => {
             setDailyLimit(newLimit);
-            localStorage.setItem(STORAGE_KEYS.dailyLimit, String(newLimit));
+            localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(newLimit));
             showToast(`Daily budget set to ₹${newLimit}`);
           }}
           onResetExpenses={handleResetAllExpenses}
           onTogglePro={() => {
             const next = !isProActive;
             setIsProActive(next);
-            localStorage.setItem(STORAGE_KEYS.pro, String(next));
+            localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(next));
             showToast(next ? "KHARCHE PRO Black Active" : "Standard Tier");
           }}
           onShowToast={showToast}
@@ -2139,6 +2140,7 @@ export function App() {
           onOpenRewardVault={() => setIsRewardVaultOpen(true)}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+            onSignOut={signOutCurrentUser}
         />
 
         {/* Stark Reward Vault (Daily Discipline Cyber Roulette Wheel) */}
@@ -2184,7 +2186,7 @@ export function App() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Select Fan-Zone Theme"
+            aria-label="Select Appearance"
             onClick={() => setIsThemeModalOpen(false)}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
           >
