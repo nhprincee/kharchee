@@ -170,10 +170,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
   );
 
   const getFriendUpiId = (friend: KhataFriend): string => {
-    if (friend.upiId && friend.upiId.trim()) return friend.upiId.trim();
-    const digits = friend.phone.replace(/\D/g, "");
-    const cleanPhone = digits.length >= 10 ? digits.slice(-10) : digits;
-    return cleanPhone ? `${cleanPhone}@upi` : `${friend.name.toLowerCase().replace(/\s+/g, "")}@okaxis`;
+    return friend.upiId?.trim() || "";
   };
 
   /**
@@ -186,6 +183,10 @@ export const KhataView: React.FC<KhataViewProps> = ({
 
   const handlePayViaUpi = async (friend: KhataFriend, amount: number) => {
     const upiId = getFriendUpiId(friend);
+    if (!upiId) {
+      onShowToast?.("Add this friend's real UPI ID before starting a payment.");
+      return;
+    }
     const positiveAmt = Math.abs(amount);
     const upiUrl = buildUpiPayUrl(upiId, friend.name, positiveAmt);
 
