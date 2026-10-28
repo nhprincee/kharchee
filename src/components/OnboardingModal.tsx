@@ -89,7 +89,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleGoogleSignIn = () => {
+  const handleContinueProfile = () => {
     if (!userName.trim() || !userEmail.trim()) {
       setProfileError("Please fill in your name and email to continue.");
       return;
@@ -197,7 +197,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   className="text-[11px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-slate-900 border border-white/10"
                   style={{ color: theme.accentHex }}
                 >
-                  Step 1 · Credential Access
+                  Step 1 · Profile Setup
                 </span>
                 <h1
                   id="onboarding-title"
@@ -301,6 +301,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     className="w-full h-10 pl-7 pr-3 rounded-xl bg-slate-950 border border-white/10 text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
                   />
                 </div>
+
+                {profileError && <p role="alert" className="text-xs text-rose-300">{profileError}</p>}
 
                 {/* Quick Income Chips */}
                 <div className="flex items-center gap-1.5 pt-1">
@@ -529,7 +531,18 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
           {step < 3 ? (
             <button
               type="button"
-              onClick={() => setStep((s) => (s + 1) as 2 | 3)}
+              onClick={() => {
+                if (step === 1) {
+                  if (!userName.trim() || !userEmail.trim() || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(userEmail.trim())) {
+                    setProfileError("Enter your name and a valid email address to continue.");
+                    return;
+                  }
+                  setProfileError("");
+                  setStep(2);
+                } else {
+                  setStep(3);
+                }
+              }}
               className={`h-10 px-5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer active:scale-95 transition-all ml-auto ${theme.buttonBg} ${theme.buttonText}`}
               style={{
                 boxShadow: `0 0 16px ${theme.ringGlow}`,
