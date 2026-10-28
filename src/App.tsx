@@ -51,7 +51,7 @@ import { KhataView } from "./components/KhataView";
 import { ProView } from "./components/ProView";
 import { JarvisDrawer } from "./components/JarvisDrawer";
 import { ProfileDrawer } from "./components/ProfileDrawer";
-import { signOutCurrentUser } from "./components/AuthGate";
+import { getCurrentUserIdToken, signOutCurrentUser } from "./components/AuthGate";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { AppTour } from "./components/AppTour";
 import { ProTrialModal } from "./components/ProTrialModal";
@@ -64,6 +64,50 @@ import {
   requestNotificationPermission,
   sendKharcheNotification,
 } from "./utils/notifications";
+
+type RazorpayPaymentResponse = {
+  razorpay_payment_id: string;
+  razorpay_subscription_id: string;
+  razorpay_signature: string;
+};
+type RazorpayFailureResponse = { error?: { description?: string } };
+type RazorpayCheckoutOptions = {
+  key: string;
+  subscription_id: string;
+  name: string;
+  description: string;
+  handler: (response: RazorpayPaymentResponse) => void | Promise<void>;
+  theme?: { color?: string };
+  modal?: { ondismiss?: () => void };
+};
+type RazorpayCheckoutInstance = {
+  open: () => void;
+  on: (event: string, handler: (response: RazorpayFailureResponse) => void) => void;
+};
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckoutInstance;
+  }
+}
+
+async function loadRazorpayCheckout(): Promise<void> {
+  if (window.Razorpay) return;
+  await new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-razorpay-checkout="true"]');
+    const script = existing || document.createElement("script");
+    const onLoad = () => window.Razorpay ? resolve() : reject(new Error("Secure checkout could not be loaded."));
+    const onError = () => reject(new Error("Secure checkout could not be loaded. Check your connection and try again."));
+    script.addEventListener("load", onLoad, { once: true });
+    script.addEventListener("error", onError, { once: true });
+    if (!existing) {
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.dataset.razorpayCheckout = "true";
+      document.body.appendChild(script);
+    }
+  });
+  if (!window.Razorpay) throw new Error("Secure checkout is unavailable.");
+}
 
 function scopedStorageKey(key: string): string {
   const uid = localStorage.getItem("kharche_current_user_uid") || "unverified";
@@ -240,22 +284,7 @@ export function App() {
     glowIntensity: number;
   } | null>(null);
 
-  const [isProActive, setIsProActive] = useState<boolean>(() => {
-    // Payment Verification Safeguard: 12-digit UTR format check is not payment verification.
-    // Client-side strings or flags do not grant paid Pro access.
-    // Preserved 3-Day Free Trial provides legitimate feature access.
-    const trialClaimed = localStorage.getItem(scopedStorageKey("kharche_pro_trial_v1")) === "claimed";
-    const expiresAtRaw = localStorage.getItem(scopedStorageKey("kharche_pro_trial_expires_at_v1"));
-    if (trialClaimed || expiresAtRaw) {
-      const expiresAt = Number(expiresAtRaw || 0);
-      if (Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() <= expiresAt) {
-        return true;
-      }
-      localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), "false");
-      return false;
-    }
-    return false;
-  });
+  const [isProActive, setIsProActive] = useState<boolean>(false);
 
   const [autoLockdownAt90, setAutoLockdownAt90] = useState<boolean>(() => {
     return localStorage.getItem(scopedStorageKey(STORAGE_KEYS.autoLockdown)) === "true";
@@ -548,8 +577,29 @@ export function App() {
   }, [themeId]);
 
   useEffect(() => {
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(isProActive));
-  }, [isProActive]);
+    let cancelled = false;
+    const syncSubscription = async () => {
+      try {
+        const token = await getCurrentUserIdToken();
+        if (!token) {
+          if (!cancelled) setIsProActive(false);
+          return;
+        }
+        const response = await fetch("/api/billing/status", { headers: { Authorization: "Bearer " + token } });
+        if (!response.ok) return;
+        const result = await response.json() as { active?: boolean };
+        if (!cancelled) setIsProActive(result.active === true);
+      } catch {
+        // Network failures must never grant Pro access.
+      }
+    };
+    void syncSubscription();
+    const intervalId = window.setInterval(() => void syncSubscription(), 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(scopedStorageKey(STORAGE_KEYS.autoLockdown), String(autoLockdownAt90));
@@ -807,13 +857,61 @@ export function App() {
   };
 
   const handleClaimProTrial = () => {
-    const expiresAt = Date.now() + 72 * 60 * 60 * 1000;
-    setIsProActive(true);
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), "true");
-    localStorage.setItem(scopedStorageKey("kharche_pro_trial_v1"), "claimed");
-    localStorage.setItem(scopedStorageKey("kharche_pro_trial_expires_at_v1"), String(expiresAt));
     setIsProTeaserOpen(false);
-    showToast("🎉 3-Day PRO Black Trial Activated (72h)! All themes & AI uncapped");
+    setActiveTab("pro");
+    showToast("Choose a Pro plan to continue to secure checkout.");
+  };
+
+  const handlePurchasePro = async (plan: "monthly" | "quarterly"): Promise<void> => {
+    const token = await getCurrentUserIdToken();
+    if (!token) throw new Error("Please sign in again before purchasing Pro.");
+    const createResponse = await fetch("/api/billing/subscription", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ plan }),
+    });
+    const checkout = await createResponse.json() as { keyId?: string; subscriptionId?: string; label?: string; error?: string };
+    if (!createResponse.ok || !checkout.keyId || !checkout.subscriptionId) {
+      throw new Error(checkout.error || "Could not start secure checkout.");
+    }
+    await loadRazorpayCheckout();
+    if (!window.Razorpay) throw new Error("Secure checkout is unavailable.");
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      const razorpay = new window.Razorpay!({
+        key: checkout.keyId!,
+        subscription_id: checkout.subscriptionId!,
+        name: "Kharchee Pro",
+        description: checkout.label || "Kharchee Pro subscription",
+        theme: { color: "#cbd5e1" },
+        modal: { ondismiss: () => fail(new Error("Checkout closed. No Pro access was granted.")) },
+        handler: async (payment) => {
+          try {
+            const verifyResponse = await fetch("/api/billing/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+              body: JSON.stringify(payment),
+            });
+            const verified = await verifyResponse.json() as { active?: boolean; error?: string };
+            if (!verifyResponse.ok || verified.active !== true) throw new Error(verified.error || "Payment is not verified yet.");
+            if (settled) return;
+            settled = true;
+            setIsProActive(true);
+            showToast("Kharchee Pro is active — payment verified by the server.");
+            resolve();
+          } catch (error) {
+            fail(error instanceof Error ? error : new Error("Payment verification failed."));
+          }
+        },
+      });
+      razorpay.on("payment.failed", (failure) => fail(new Error(failure.error?.description || "Payment failed. No Pro access was granted.")));
+      razorpay.open();
+    });
   };
 
   const handleReplayTour = () => {
@@ -1240,13 +1338,7 @@ export function App() {
         if (/^\d{12}$/.test(cleanedBackupUtr)) {
           localStorage.setItem(scopedStorageKey("kharche_pro_submitted_utr_v1"), cleanedBackupUtr);
         }
-        // Pro access is strictly tied to valid trial period, not unverified UTR strings
-        const trialExpiresAtRaw = localStorage.getItem(scopedStorageKey("kharche_pro_trial_expires_at_v1"));
-        const isTrialValid =
-          localStorage.getItem(scopedStorageKey("kharche_pro_trial_v1")) === "claimed" &&
-          Number(trialExpiresAtRaw || 0) > Date.now();
-        setIsProActive(isTrialValid);
-        localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(isTrialValid));
+        // Premium access is server-authoritative; backup files cannot unlock paid Pro.
         if (Array.isArray(parsed.unlockedBadgeIds)) {
           const cleanUnlocked = parsed.unlockedBadgeIds.filter(
             (id): id is string => typeof id === "string"
@@ -1807,15 +1899,7 @@ export function App() {
               onApplyCustomTheme={(custom) => {
                 setCustomThemeOverride(custom);
               }}
-              onTogglePro={() => {
-                const next = !isProActive;
-                setIsProActive(next);
-                showToast(
-                  next
-                    ? "👑 KHARCHE PRO Black Edition Vault Unlocked"
-                    : "Standard Tier Active"
-                );
-              }}
+              onPurchasePro={handlePurchasePro}
               onToggleAutoLockdown={() => setAutoLockdownAt90((v) => !v)}
               onToggleNotifications={handleToggleNotifications}
               onSendTestNotification={handleSendTestNotification}
