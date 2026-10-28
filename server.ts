@@ -744,7 +744,7 @@ function getRazorpayConfig() {
 function getPlanConfig(plan: BillingPlanKey) {
   const planId = plan === "monthly" ? process.env.RAZORPAY_MONTHLY_PLAN_ID?.trim() : process.env.RAZORPAY_QUARTERLY_PLAN_ID?.trim();
   if (!planId) throw new Error("Razorpay plan ID is not configured.");
-  return { planId, amountPaise: plan === "monthly" ? 3900 : 9900, label: plan === "monthly" ? "Kharchee Pro Monthly" : "Kharchee Pro Quarterly", totalCount: plan === "monthly" ? 120 : 40, periodMs: plan === "monthly" ? 30 * 24 * 60 * 60 * 1000 : 90 * 24 * 60 * 60 * 1000 };
+  return { planId, amountPaise: plan === "monthly" ? 3000 : 9900, label: plan === "monthly" ? "Kharchee Pro Monthly" : "Kharchee Pro Quarterly", totalCount: plan === "monthly" ? 120 : 40, periodMs: plan === "monthly" ? 30 * 24 * 60 * 60 * 1000 : 90 * 24 * 60 * 60 * 1000 };
 }
 
 async function razorpayApi<T>(pathName: string, method: "GET" | "POST", body?: unknown): Promise<T> {
