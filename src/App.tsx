@@ -243,8 +243,8 @@ export function App() {
     // Payment Verification Safeguard: 12-digit UTR format check is not payment verification.
     // Client-side strings or flags do not grant paid Pro access.
     // Preserved 3-Day Free Trial provides legitimate feature access.
-    const trialClaimed = localStorage.getItem("kharche_pro_trial_v1") === "claimed";
-    const expiresAtRaw = localStorage.getItem("kharche_pro_trial_expires_at_v1");
+    const trialClaimed = localStorage.getItem(scopedStorageKey("kharche_pro_trial_v1")) === "claimed";
+    const expiresAtRaw = localStorage.getItem(scopedStorageKey("kharche_pro_trial_expires_at_v1"));
     if (trialClaimed || expiresAtRaw) {
       const expiresAt = Number(expiresAtRaw || 0);
       if (Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() <= expiresAt) {
@@ -280,7 +280,7 @@ export function App() {
   const [isRewardVaultOpen, setIsRewardVaultOpen] = useState(false);
   const [unlockedBadgeIds, setUnlockedBadgeIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem("kharche_stark_unlocked_badges_v1");
+      const saved = localStorage.getItem(scopedStorageKey("kharche_stark_unlocked_badges_v1"));
       return saved ? JSON.parse(saved) : ["iron-discipline", "zero-leak-legend"];
     } catch {
       return ["iron-discipline", "zero-leak-legend"];
@@ -288,7 +288,7 @@ export function App() {
   });
   const [pinnedBadgeIds, setPinnedBadgeIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem("kharche_stark_pinned_badges_v1");
+      const saved = localStorage.getItem(scopedStorageKey("kharche_stark_pinned_badges_v1"));
       return saved ? JSON.parse(saved) : ["iron-discipline", "zero-leak-legend"];
     } catch {
       return ["iron-discipline", "zero-leak-legend"];
@@ -302,7 +302,7 @@ export function App() {
 
   // Feature 4: "STEALTH ZERO-BALANCE SHIELD" (Privacy Toggle)
   const [stealthMode, setStealthMode] = useState<boolean>(() => {
-    return localStorage.getItem("kharche_stealth_mode_v1") === "true";
+    return localStorage.getItem(scopedStorageKey("kharche_stealth_mode_v1")) === "true";
   });
 
   // Feature 5: "BIOMETRIC HUD SCANNER ON BOOT" (1.5-second cyan thumbprint laser-scan)
@@ -392,12 +392,12 @@ export function App() {
   const handleUnlockAndPinBadge = (badgeId: string) => {
     setUnlockedBadgeIds((prev) => {
       const next = prev.includes(badgeId) ? prev : [...prev, badgeId];
-      localStorage.setItem("kharche_stark_unlocked_badges_v1", JSON.stringify(next));
+      localStorage.setItem(scopedStorageKey("kharche_stark_unlocked_badges_v1"), JSON.stringify(next));
       return next;
     });
     setPinnedBadgeIds((prev) => {
       const next = prev.includes(badgeId) ? prev : [...prev, badgeId];
-      localStorage.setItem("kharche_stark_pinned_badges_v1", JSON.stringify(next));
+      localStorage.setItem(scopedStorageKey("kharche_stark_pinned_badges_v1"), JSON.stringify(next));
       return next;
     });
     const badgeObj = STARK_ARC_BADGES.find((b) => b.id === badgeId);
@@ -411,7 +411,7 @@ export function App() {
       const next = prev.includes(badgeId)
         ? prev.filter((id) => id !== badgeId)
         : [...prev, badgeId];
-      localStorage.setItem("kharche_stark_pinned_badges_v1", JSON.stringify(next));
+      localStorage.setItem(scopedStorageKey("kharche_stark_pinned_badges_v1"), JSON.stringify(next));
       return next;
     });
   };
@@ -462,7 +462,7 @@ export function App() {
 
   // Receiving UPI ID (Khata Direct Settlement)
   const [myUpiId, setMyUpiId] = useState<string>(() => {
-    return localStorage.getItem("kharche_my_upi_id_v1") || "";
+    return localStorage.getItem(scopedStorageKey("kharche_my_upi_id_v1")) || "";
   });
 
   // Global Smart Clipboard & SMS Auto-Detection State
@@ -502,9 +502,9 @@ export function App() {
 
   useEffect(() => {
     const todayKey = new Date().toDateString();
-    const lastBriefedDate = localStorage.getItem("kharche_morning_briefing_date_v1");
+    const lastBriefedDate = localStorage.getItem(scopedStorageKey("kharche_morning_briefing_date_v1"));
     if (lastBriefedDate !== todayKey) {
-      localStorage.setItem("kharche_morning_briefing_date_v1", todayKey);
+      localStorage.setItem(scopedStorageKey("kharche_morning_briefing_date_v1"), todayKey);
       triggerStarkMorningBriefing(dailyLimit);
     }
   }, []);
@@ -527,7 +527,7 @@ export function App() {
   }, [dailyLimit]);
 
   useEffect(() => {
-    localStorage.setItem("kharche_my_upi_id_v1", myUpiId);
+    localStorage.setItem(scopedStorageKey("kharche_my_upi_id_v1"), myUpiId);
   }, [myUpiId]);
 
   useEffect(() => {
@@ -773,8 +773,8 @@ export function App() {
     notificationsEnabled: boolean;
   }) => {
     localStorage.setItem(scopedStorageKey(STORAGE_KEYS.onboarding), "true");
-    localStorage.setItem("kharche_user_name_v1", data.userName);
-    localStorage.setItem("kharche_user_email_v1", data.email);
+    localStorage.setItem(scopedStorageKey("kharche_user_name_v1"), data.userName);
+    localStorage.setItem(scopedStorageKey("kharche_user_email_v1"), data.email);
     localStorage.setItem(
           scopedStorageKey(STORAGE_KEYS.financialProfile),
       JSON.stringify({
@@ -809,8 +809,8 @@ export function App() {
     const expiresAt = Date.now() + 72 * 60 * 60 * 1000;
     setIsProActive(true);
     localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), "true");
-    localStorage.setItem("kharche_pro_trial_v1", "claimed");
-    localStorage.setItem("kharche_pro_trial_expires_at_v1", String(expiresAt));
+    localStorage.setItem(scopedStorageKey("kharche_pro_trial_v1"), "claimed");
+    localStorage.setItem(scopedStorageKey("kharche_pro_trial_expires_at_v1"), String(expiresAt));
     setIsProTeaserOpen(false);
     showToast("🎉 3-Day PRO Black Trial Activated (72h)! All themes & AI uncapped");
   };
@@ -1145,7 +1145,7 @@ export function App() {
       myUpiId,
       themeId,
       isProActive,
-      proUtr: localStorage.getItem("kharche_pro_utr_v1") || "",
+      proUtr: localStorage.getItem(scopedStorageKey("kharche_pro_utr_v1")) || "",
       lockdownActive,
       autoLockdownAt90,
       unlockedBadgeIds,
@@ -1232,17 +1232,17 @@ export function App() {
         }
         if (typeof parsed.myUpiId === "string" && parsed.myUpiId.includes("@")) {
           setMyUpiId(parsed.myUpiId.trim());
-          localStorage.setItem("kharche_my_upi_id_v1", parsed.myUpiId.trim());
+          localStorage.setItem(scopedStorageKey("kharche_my_upi_id_v1"), parsed.myUpiId.trim());
         }
         const cleanedBackupUtr =
           typeof parsed.proUtr === "string" ? parsed.proUtr.trim() : "";
         if (/^\d{12}$/.test(cleanedBackupUtr)) {
-          localStorage.setItem("kharche_pro_submitted_utr_v1", cleanedBackupUtr);
+          localStorage.setItem(scopedStorageKey("kharche_pro_submitted_utr_v1"), cleanedBackupUtr);
         }
         // Pro access is strictly tied to valid trial period, not unverified UTR strings
-        const trialExpiresAtRaw = localStorage.getItem("kharche_pro_trial_expires_at_v1");
+        const trialExpiresAtRaw = localStorage.getItem(scopedStorageKey("kharche_pro_trial_expires_at_v1"));
         const isTrialValid =
-          localStorage.getItem("kharche_pro_trial_v1") === "claimed" &&
+          localStorage.getItem(scopedStorageKey("kharche_pro_trial_v1")) === "claimed" &&
           Number(trialExpiresAtRaw || 0) > Date.now();
         setIsProActive(isTrialValid);
         localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(isTrialValid));
@@ -1423,7 +1423,7 @@ export function App() {
             playQuickAddChirp();
             setStealthMode((prev) => {
               const next = !prev;
-              localStorage.setItem("kharche_stealth_mode_v1", String(next));
+              localStorage.setItem(scopedStorageKey("kharche_stealth_mode_v1"), String(next));
               showToast(
                 next
                   ? "👁️‍🗨️ Stealth Zero-Balance Shield ON: ₹0.00 / Empty Vault"
