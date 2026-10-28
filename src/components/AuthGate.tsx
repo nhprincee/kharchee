@@ -39,6 +39,8 @@ export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
       return;
     }
     return onAuthStateChanged(auth, (nextUser) => {
+      if (nextUser) localStorage.setItem("kharche_current_user_uid", nextUser.uid);
+      else localStorage.removeItem("kharche_current_user_uid");
       setUser(nextUser);
       setAuthReady(true);
     });
