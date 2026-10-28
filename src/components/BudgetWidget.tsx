@@ -130,26 +130,46 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
 
   // Financial Metrics derived strictly from real user records
   const financialTotals = useMemo(() => {
-    const totalIncome = expenses
-      .filter((e) => e.type === "income")
-      .reduce((sum, e) => sum + e.amount, 0);
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
-    const totalExpenses = expenses
-      .filter((e) => e.type !== "income")
-      .reduce((sum, e) => sum + e.amount, 0);
+    const allIncome = expenses.filter((e) => e.type === "income");
+    const allExpenses = expenses.filter((e) => e.type !== "income");
 
-    const netBalance = totalIncome - totalExpenses;
+    const totalIncomeAllTime = allIncome.reduce((sum, e) => sum + e.amount, 0);
+    const totalExpensesAllTime = allExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const netBalanceAllTime = totalIncomeAllTime - totalExpensesAllTime;
+
+    const thisMonthIncome = allIncome.filter((e) => {
+      const d = new Date(e.timestamp);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+    const thisMonthExpenses = allExpenses.filter((e) => {
+      const d = new Date(e.timestamp);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    const monthIncome = thisMonthIncome.reduce((sum, e) => sum + e.amount, 0);
+    const monthExpenses = thisMonthExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const monthNetBalance = monthIncome - monthExpenses;
+
     const monthlyBudget = dailyLimit * 30;
-    const remainingMonthlyBudget = monthlyBudget - totalExpenses;
+    const remainingMonthlyBudget = monthlyBudget - monthExpenses;
 
     return {
-      totalIncome,
-      totalExpenses,
-      netBalance,
+      totalIncomeAllTime,
+      totalExpensesAllTime,
+      netBalanceAllTime,
+      monthIncome,
+      monthExpenses,
+      monthNetBalance,
       monthlyBudget,
       remainingMonthlyBudget,
-      incomeCount: expenses.filter((e) => e.type === "income").length,
-      expenseCount: expenses.filter((e) => e.type !== "income").length,
+      incomeCount: thisMonthIncome.length,
+      expenseCount: thisMonthExpenses.length,
+      allTimeIncomeCount: allIncome.length,
+      allTimeExpenseCount: allExpenses.length,
     };
   }, [expenses, dailyLimit]);
 
@@ -200,6 +220,15 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
     return Math.max(1000, ...vals);
   }, [cashflowChartData]);
 
+  const chartTotalIncome = useMemo(
+    () => cashflowChartData.reduce((sum, b) => sum + b.income, 0),
+    [cashflowChartData]
+  );
+  const chartTotalExpense = useMemo(
+    () => cashflowChartData.reduce((sum, b) => sum + b.expense, 0),
+    [cashflowChartData]
+  );
+
   // Category-Wise Spending Breakdown
   const categoryBreakdown = useMemo(() => {
     const expenseItems = expenses.filter((e) => e.type !== "income");
@@ -244,11 +273,11 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
     <div className="space-y-6">
       {/* 1. FINANCIAL SUMMARY CARDS (4-Card SaaS KPI Grid) */}
       <section aria-label="Financial Summary Cards" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Card 1: Net Position / Total Balance */}
+        {/* Card 1: All-Time Net Balance */}
         <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Net Position
+              All-Time Balance
             </span>
             <span className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center text-indigo-400">
               <Wallet className="w-3.5 h-3.5" />
@@ -258,30 +287,32 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
             <p className="font-mono tabular-nums text-xl sm:text-2xl font-extrabold text-white tracking-tight">
               {stealthMode
                 ? "₹0"
-                : `${financialTotals.netBalance >= 0 ? "+" : "−"}₹${Math.abs(
-                    financialTotals.netBalance
+                : `${financialTotals.netBalanceAllTime >= 0 ? "+" : "−"}₹${Math.abs(
+                    financialTotals.netBalanceAllTime
                   ).toLocaleString("en-IN")}`}
             </p>
             <div className="flex items-center gap-1.5 mt-1">
               <span
                 className={`inline-flex items-center gap-0.5 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
-                  financialTotals.netBalance >= 0
+                  financialTotals.netBalanceAllTime >= 0
                     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
                     : "bg-rose-500/10 border-rose-500/30 text-rose-300"
                 }`}
               >
-                {financialTotals.netBalance >= 0 ? "Surplus" : "Deficit"}
+                {financialTotals.netBalanceAllTime >= 0 ? "Surplus" : "Deficit"}
               </span>
-              <span className="text-[11px] text-slate-400 truncate">Income − Spend</span>
+              <span className="text-[11px] text-slate-400 truncate">
+                Month: {financialTotals.monthNetBalance >= 0 ? "+" : "−"}₹{Math.abs(financialTotals.monthNetBalance).toLocaleString("en-IN")}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Card 2: Total Income */}
+        {/* Card 2: This Month Inflow */}
         <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Income
+              This Month Inflow
             </span>
             <span className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
               <ArrowDownLeft className="w-3.5 h-3.5" />
@@ -289,30 +320,24 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
           </div>
           <div className="mt-3">
             <p className="font-mono tabular-nums text-xl sm:text-2xl font-extrabold text-emerald-400 tracking-tight">
-              {stealthMode ? "₹0" : `+₹${financialTotals.totalIncome.toLocaleString("en-IN")}`}
+              {stealthMode ? "₹0" : `+₹${financialTotals.monthIncome.toLocaleString("en-IN")}`}
             </p>
             <div className="flex items-center justify-between gap-1 mt-1">
               <span className="text-[11px] text-slate-400 font-mono tabular-nums">
                 {financialTotals.incomeCount} inflows
               </span>
-              {onOpenAddIncomeModal && (
-                <button
-                  type="button"
-                  onClick={onOpenAddIncomeModal}
-                  className="text-[10px] font-semibold text-emerald-300 hover:text-emerald-200 underline cursor-pointer"
-                >
-                  + Add
-                </button>
-              )}
+              <span className="text-[10px] font-mono text-slate-500">
+                All-time: +₹{financialTotals.totalIncomeAllTime.toLocaleString("en-IN")}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Card 3: Total Expenses */}
+        {/* Card 3: This Month Outflow */}
         <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Expenses
+              This Month Outflow
             </span>
             <span className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400">
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -320,20 +345,20 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
           </div>
           <div className="mt-3">
             <p className="font-mono tabular-nums text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-              {stealthMode ? "₹0" : `−₹${financialTotals.totalExpenses.toLocaleString("en-IN")}`}
+              {stealthMode ? "₹0" : `−₹${financialTotals.monthExpenses.toLocaleString("en-IN")}`}
             </p>
             <div className="flex items-center justify-between gap-1 mt-1">
               <span className="text-[11px] text-slate-400 font-mono tabular-nums truncate">
                 Today: ₹{stealthMode ? "0" : todaySpent.toLocaleString("en-IN")}
               </span>
               <span className="text-[10px] font-mono text-slate-500">
-                {financialTotals.expenseCount} txns
+                All-time: −₹{financialTotals.totalExpensesAllTime.toLocaleString("en-IN")}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Card 4: Savings / Remaining Daily Budget */}
+        {/* Card 4: Daily Budget Left */}
         <div
           id="tour-budget-ring"
           className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between"
@@ -724,15 +749,15 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
 
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-400">
             <span>
-              Inflow:{" "}
+              4-Wk Inflow:{" "}
               <strong className="text-emerald-400">
-                +₹{stealthMode ? "0" : financialTotals.totalIncome.toLocaleString("en-IN")}
+                +₹{stealthMode ? "0" : chartTotalIncome.toLocaleString("en-IN")}
               </strong>
             </span>
             <span>
-              Outflow:{" "}
+              4-Wk Outflow:{" "}
               <strong className="text-slate-200">
-                −₹{stealthMode ? "0" : financialTotals.totalExpenses.toLocaleString("en-IN")}
+                −₹{stealthMode ? "0" : chartTotalExpense.toLocaleString("en-IN")}
               </strong>
             </span>
           </div>

@@ -87,8 +87,8 @@ interface NfcTapPreset {
 const NFC_TAP_PRESETS: NfcTapPreset[] = [
   {
     id: "nfc-starbucks",
-    badge: "💳 Credit Card Tap",
-    cardOrTagName: "HDFC Infinia Metal •••• 4821",
+    badge: "🏷️ Demo Preset",
+    cardOrTagName: "Starbucks POS Simulator (Demo)",
     vendor: "Starbucks Reserve Roastery",
     amount: 360,
     category: "Chai & Snacks",
@@ -97,8 +97,8 @@ const NFC_TAP_PRESETS: NfcTapPreset[] = [
   },
   {
     id: "nfc-shell",
-    badge: "💳 Credit Card Tap",
-    cardOrTagName: "Axis Magnus Visa •••• 9014",
+    badge: "🏷️ Demo Preset",
+    cardOrTagName: "Fuel Station Simulator (Demo)",
     vendor: "Shell V-Power Fuel Station",
     amount: 550,
     category: "Transport",
@@ -107,8 +107,8 @@ const NFC_TAP_PRESETS: NfcTapPreset[] = [
   },
   {
     id: "nfc-tapri",
-    badge: "🏷️ Smart NFC Tag",
-    cardOrTagName: "Desk / Tapri NFC Sticker",
+    badge: "🏷️ Demo Preset",
+    cardOrTagName: "Desk / Tapri NFC Sticker (Demo)",
     vendor: "Sharma Ji Cutting Chai & Bun Maska",
     amount: 45,
     category: "Chai & Snacks",
@@ -117,8 +117,8 @@ const NFC_TAP_PRESETS: NfcTapPreset[] = [
   },
   {
     id: "nfc-dining",
-    badge: "💳 Credit Card Tap",
-    cardOrTagName: "Amex Platinum Charge •••• 3009",
+    badge: "🏷️ Demo Preset",
+    cardOrTagName: "Dining Terminal Simulator (Demo)",
     vendor: "Truffles Koramangala",
     amount: 480,
     category: "Food",
@@ -330,13 +330,14 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     playProVaultChime();
     setLastNfcTap(tapData);
     setTitle(tapData.vendor);
-    setAmount(String(tapData.amount));
+    // Explicitly do NOT pre-fill fabricated amount - require manual verification
+    setAmount("");
     setCategory(tapData.category);
     setPaymentMode(tapData.paymentMode);
-    setNote(`NFC Tap (${tapData.cardOrTagName}) · UID ${tapData.tagSerial}`);
+    setNote(`[DEMO NFC] ${tapData.cardOrTagName} · UID ${tapData.tagSerial}`);
     setError("");
     setNfcStatusMessage(
-      `⚡ NFC Tap Read: Pre-filled "${tapData.vendor}" & Payment Mode "${tapData.paymentMode}"`
+      `🏷️ Demo NFC Tag "${tapData.vendor}" selected. Please enter your actual expense amount manually.`
     );
     setActiveTab("manual");
   };
@@ -344,7 +345,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   const handleStartHardwareOrSimulatedNfc = async (presetOverride?: NfcTapPreset) => {
     setError("");
     setIsScanningNfc(true);
-    setNfcStatusMessage("📡 Approaching NFC field... Hold credit card or NDEF tag near device");
+    setNfcStatusMessage("📡 Approaching NFC field... Tap an NDEF tag or select a demo preset");
     playQuickAddChirp();
 
     if (presetOverride) {
@@ -370,7 +371,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       try {
         const ndef = new NDEFReaderCtor();
         await ndef.scan();
-        setNfcStatusMessage("📡 Hardware Web NFC Reader active! Tap credit card or NFC tag now...");
+        setNfcStatusMessage("📡 Web NFC active! Tap any generic NDEF tag near phone (Bank cards not supported)...");
         ndef.onreading = (event) => {
           let decodedText = "";
           try {
@@ -382,36 +383,35 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           } catch {
             // fallback
           }
-          const matchedPreset =
-            NFC_TAP_PRESETS.find((p) =>
-              decodedText.toLowerCase().includes(p.vendor.toLowerCase())
-            ) || {
-              id: "nfc-live",
-              badge: "💳 Hardware NFC Tap",
-              cardOrTagName: `Contactless Card/Tag (${event.serialNumber || "EMV-NFC"})`,
-              vendor: decodedText.trim() || "Contactless POS Terminal",
-              amount: 350,
-              category: "Food" as ExpenseCategory,
-              paymentMode: "Card" as PaymentMode,
-              tagSerial: event.serialNumber || "04:E9:2A:11",
-            };
+          const vendorName = decodedText.trim() || "NDEF Tag Scan";
           setIsScanningNfc(false);
-          applyNfcTapToForm(matchedPreset);
+          playProVaultChime();
+          setTitle(vendorName);
+          setAmount(""); // Never inject fabricated amount
+          setCategory("Food");
+          setPaymentMode("Card");
+          setNote(`[NDEF Tag] UID ${event.serialNumber || "Generic-NFC"} · Text: ${vendorName.slice(0, 50)}`);
+          setError("");
+          setNfcStatusMessage(`🏷️ NDEF Tag read: "${vendorName}". Please enter the actual amount manually.`);
+          setActiveTab("manual");
         };
         ndef.onreadingerror = () => {
           setIsScanningNfc(false);
-          applyNfcTapToForm(NFC_TAP_PRESETS[0]);
+          setNfcStatusMessage("NFC read error or tag not recognized. Please use manual entry.");
         };
         return;
       } catch {
-        // Fallback to simulated contactless EMV read if permission denied or desktop
+        setIsScanningNfc(false);
+        setNfcStatusMessage("Web NFC permission denied or unavailable. Tap a demo preset below or enter manually.");
+        return;
       }
     }
 
+    // When Web NFC is unavailable (desktop / non-supported browser), notify clearly without auto-submitting
     setTimeout(() => {
       setIsScanningNfc(false);
-      applyNfcTapToForm(NFC_TAP_PRESETS[0]);
-    }, 650);
+      setNfcStatusMessage("Web NFC requires Android Chrome. Test with a demo preset below or use Manual entry.");
+    }, 500);
   };
 
   const runGeminiVisionOcr = async (
@@ -694,7 +694,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             }`}
           >
             <Wifi className="w-3.5 h-3.5 text-amber-400 rotate-90" />
-            <span>NFC Tap</span>
+            <span>NFC (Demo)</span>
           </button>
           <button
             type="button"
@@ -1012,9 +1012,20 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           </div>
         )}
 
-        {/* Tab 1.5: Contactless NFC Credit Card / Tag Reader */}
+        {/* Tab 1.5: NFC NDEF Tag Reader & Demo Simulator */}
         {activeTab === "nfc" && (
           <div className="space-y-3 relative z-10 overflow-y-auto pr-0.5 no-scrollbar flex-1">
+            {/* Clear Bank Card / EMV Limitation Disclaimer */}
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                <span className="font-mono uppercase tracking-wider text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/40">DEMO ONLY</span>
+                <span>NFC &amp; Bank Card Notice</span>
+              </div>
+              <p className="text-[11px] text-amber-100/90 leading-relaxed">
+                Browser Web NFC only reads generic NDEF text/URL tags. It <strong>cannot</strong> read bank EMV card transactions, account balances, or contactless POS payments. Presets below are for UI demonstration only. Fabricated amounts are never auto-submitted.
+              </p>
+            </div>
+
             {/* Interactive Contactless Radar Zone */}
             <div className="p-4 rounded-2xl border border-amber-400/40 bg-gradient-to-b from-slate-900 via-[#090d16] to-slate-950 flex flex-col items-center text-center space-y-2.5 shadow-[0_0_24px_rgba(245,158,11,0.15)]">
               <div className="relative w-16 h-16 rounded-full bg-amber-500/15 border border-amber-400/60 flex items-center justify-center shadow-[0_0_25px_rgba(245,158,11,0.35)]">
@@ -1027,11 +1038,11 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               <div>
                 <h3 className="text-xs font-black uppercase tracking-wider text-amber-200 font-mono">
                   {isScanningNfc
-                    ? "Scanning NFC Field (13.56 MHz)..."
-                    : "Tap Credit Card or Smart NFC Tag"}
+                    ? "Scanning Web NFC Field (NDEF 13.56 MHz)..."
+                    : "Scan Generic NDEF Tag (DEMO)"}
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5 max-w-[310px]">
-                  Hold your contactless EMV card or NDEF tag near your phone to auto-fill vendor, amount &amp; payment method.
+                  Reads custom text/URL tags. Bank cards and financial EMV chips are not supported by web browsers.
                 </p>
               </div>
 
@@ -1042,7 +1053,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-300 to-cyan-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_20px_rgba(245,158,11,0.4)] cursor-pointer active:scale-95 transition-all"
               >
                 <CreditCard className="w-4 h-4" />
-                <span>{isScanningNfc ? "Reading Card / Tag..." : "Activate NFC Reader"}</span>
+                <span>{isScanningNfc ? "Scanning NDEF Tag..." : "Scan Generic NDEF Tag"}</span>
               </button>
 
               {nfcStatusMessage && (
@@ -1052,10 +1063,10 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               )}
             </div>
 
-            {/* Instant 1-Tap Contactless Card & Smart Tag Simulators */}
+            {/* Instant 1-Tap Simulated Demo Presets */}
             <div className="space-y-1.5">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Simulate Card / Tag Tap (Auto-Fills Vendor &amp; Payment Mode):
+                Simulated Demo Presets (Selects vendor &amp; payment mode · Amount entered manually):
               </span>
               <div className="grid grid-cols-1 gap-2">
                 {NFC_TAP_PRESETS.map((preset) => (
@@ -1080,11 +1091,11 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="font-mono text-sm font-black text-emerald-400 block">
-                        ₹{preset.amount}
+                      <span className="font-mono text-xs text-amber-300 block">
+                        Sample Ref: ₹{preset.amount}
                       </span>
                       <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
-                        {preset.paymentMode}
+                        {preset.paymentMode} (Manual Amount)
                       </span>
                     </div>
                   </button>

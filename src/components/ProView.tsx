@@ -127,7 +127,7 @@ export const ProView: React.FC<ProViewProps> = ({
   const [selectedPlan, setSelectedPlan] = useState<"monthly" | "quarterly">("quarterly");
   const [isCheckoutDrawerOpen, setIsCheckoutDrawerOpen] = useState(false);
   const [proUtrInput, setProUtrInput] = useState<string>(
-    () => localStorage.getItem("kharche_pro_utr_v1") || ""
+    () => localStorage.getItem("kharche_pro_submitted_utr_v1") || localStorage.getItem("kharche_pro_utr_v1") || ""
   );
   const [proUtrError, setProUtrError] = useState<string | null>(null);
 
@@ -257,19 +257,33 @@ export const ProView: React.FC<ProViewProps> = ({
     ];
   }, [friends]);
 
-  // Compute Monthly Audit Metrics
+  // Compute Monthly Audit Metrics (strictly excludes income from spend totals)
   const auditStats = useMemo(() => {
-    const totalSpent = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const expenseOnly = expenses.filter((e) => e.type !== "income");
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const thisMonthExpenses = expenseOnly.filter((e) => {
+      const d = new Date(e.timestamp);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    const thisMonthSpent = thisMonthExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const allTimeSpent = expenseOnly.reduce((sum, e) => sum + e.amount, 0);
     const monthlyBudget = dailyLimit * 30;
-    const remainingMonthly = Math.max(0, monthlyBudget - totalSpent);
+    const remainingMonthly = Math.max(0, monthlyBudget - thisMonthSpent);
     const avgDailySpend = Math.max(
       1,
-      Math.round(totalSpent / Math.max(1, new Set(expenses.map((e) => e.timestamp.slice(0, 10))).size))
+      Math.round(
+        thisMonthSpent /
+          Math.max(1, new Set(thisMonthExpenses.map((e) => e.timestamp.slice(0, 10))).size)
+      )
     );
     const runwayDays = Math.min(99, Math.round(remainingMonthly / avgDailySpend));
 
     const categoryTotals: Record<string, number> = {};
-    expenses.forEach((e) => {
+    thisMonthExpenses.forEach((e) => {
       categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
     });
 
@@ -278,13 +292,15 @@ export const ProView: React.FC<ProViewProps> = ({
     );
 
     return {
-      totalSpent,
+      totalSpent: thisMonthSpent,
+      thisMonthSpent,
+      allTimeSpent,
       monthlyBudget,
       remainingMonthly,
       avgDailySpend,
       runwayDays,
       sortedCategories,
-      txCount: expenses.length,
+      txCount: thisMonthExpenses.length,
     };
   }, [expenses, dailyLimit]);
 
@@ -375,6 +391,7 @@ export const ProView: React.FC<ProViewProps> = ({
       .join("");
 
     const txRowsHtml = expenses
+      .filter((e) => e.type !== "income")
       .slice(0, 25)
       .map(
         (e) => `
@@ -1565,6 +1582,17 @@ export const ProView: React.FC<ProViewProps> = ({
               </div>
             </div>
 
+            {/* Payment Verification Limitation Notice */}
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/30">NOTICE</span>
+                <span>Payment Verification Limitation</span>
+              </div>
+              <p className="text-[10px] text-amber-100/85 leading-relaxed">
+                A 12-digit UTR format check is not payment verification. Without a server-side merchant payment gateway / webhook to verify bank deposits, paid Pro status remains unverified. To explore Pro features, please use the 3-Day Free Trial.
+              </p>
+            </div>
+
             {/* Transaction Reference / UTR Number Verification */}
             <div className="p-3 rounded-2xl bg-[#060911] border border-amber-400/35 space-y-1.5">
               <label
@@ -1590,7 +1618,7 @@ export const ProView: React.FC<ProViewProps> = ({
                 </p>
               ) : (
                 <p className="text-[10px] text-slate-400 leading-tight">
-                  Complete the ₹{selectedPlanAmount} UPI transfer above, then enter your UTR / Reference ID to verify &amp; unlock PRO.
+                  Submit your 12-digit UPI reference ID. Reference will be recorded locally (Unverified without live payment gateway).
                 </p>
               )}
             </div>
@@ -1615,26 +1643,22 @@ export const ProView: React.FC<ProViewProps> = ({
                   const cleanedUtr = proUtrInput.trim();
                   if (!/^\d{12}$/.test(cleanedUtr)) {
                     setProUtrError(
-                      "Please enter a valid 12-digit numeric UPI UTR / Reference Number (e.g. 429810394812) to verify payment."
+                      "Please enter a valid 12-digit numeric UPI UTR / Reference Number (e.g. 429810394812)."
                     );
                     return;
                   }
-                  localStorage.setItem("kharche_pro_utr_v1", cleanedUtr);
+                  localStorage.setItem("kharche_pro_submitted_utr_v1", cleanedUtr);
                   setProUtrError(null);
                   playProVaultChime();
-                  if (!isProActive) {
-                    fireConfettiBurst("#fbbf24");
-                    onTogglePro();
-                  }
                   setIsCheckoutDrawerOpen(false);
                   onShowToast?.(
-                    `👑 ${selectedPlanTitle} Verified (UTR: ${cleanedUtr}) & Activated!`
+                    `Reference #${cleanedUtr} recorded (Payment Unverified · No live gateway connected)`
                   );
                 }}
-                className="h-11 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(251,191,36,0.45)] cursor-pointer active:scale-95 transition-transform"
+                className="h-11 rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-amber-300 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(251,191,36,0.25)] cursor-pointer active:scale-95 transition-transform"
               >
                 <Check className="w-4 h-4 stroke-[3]" />
-                <span>Verify &amp; Unlock</span>
+                <span>Submit Ref (Unverified)</span>
               </button>
             </div>
           </div>

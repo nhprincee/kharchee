@@ -265,9 +265,9 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
     };
   }, [dailyLimit, rangeDays, totalSpent, categoryStats, runwayTelemetry]);
 
-  // Feature 3: "HABIT LEAK ANNUAL PROJECTOR" (Micro-transactions <= ₹50)
+  // Feature 3: "HABIT LEAK ANNUAL PROJECTOR" (Micro-transactions <= ₹50, expense only)
   const habitLeakTelemetry = useMemo(() => {
-    const microTxns = expenses.filter((e) => e.amount <= 50);
+    const microTxns = expenses.filter((e) => e.type !== "income" && e.amount <= 50);
     const microTotal = microTxns.reduce((sum, e) => sum + e.amount, 0);
     const uniqueDays = Math.max(
       1,

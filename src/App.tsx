@@ -238,26 +238,20 @@ export function App() {
   } | null>(null);
 
   const [isProActive, setIsProActive] = useState<boolean>(() => {
-    const storedPro = localStorage.getItem(STORAGE_KEYS.pro) === "true";
-    if (!storedPro) return false;
-
-    const savedUtr = (localStorage.getItem("kharche_pro_utr_v1") || "").trim();
-    if (/^\d{12}$/.test(savedUtr)) {
-      return true;
-    }
-
+    // Payment Verification Safeguard: 12-digit UTR format check is not payment verification.
+    // Client-side strings or flags do not grant paid Pro access.
+    // Preserved 3-Day Free Trial provides legitimate feature access.
     const trialClaimed = localStorage.getItem("kharche_pro_trial_v1") === "claimed";
     const expiresAtRaw = localStorage.getItem("kharche_pro_trial_expires_at_v1");
     if (trialClaimed || expiresAtRaw) {
       const expiresAt = Number(expiresAtRaw || 0);
-      if (!Number.isFinite(expiresAt) || expiresAt <= 0 || Date.now() > expiresAt) {
-        localStorage.setItem(STORAGE_KEYS.pro, "false");
-        return false;
+      if (Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() <= expiresAt) {
+        return true;
       }
-      return true;
+      localStorage.setItem(STORAGE_KEYS.pro, "false");
+      return false;
     }
-
-    return storedPro;
+    return false;
   });
 
   const [autoLockdownAt90, setAutoLockdownAt90] = useState<boolean>(() => {
@@ -1243,16 +1237,15 @@ export function App() {
         const cleanedBackupUtr =
           typeof parsed.proUtr === "string" ? parsed.proUtr.trim() : "";
         if (/^\d{12}$/.test(cleanedBackupUtr)) {
-          localStorage.setItem("kharche_pro_utr_v1", cleanedBackupUtr);
+          localStorage.setItem("kharche_pro_submitted_utr_v1", cleanedBackupUtr);
         }
-        if (typeof parsed.isProActive === "boolean") {
-          const canActivatePro =
-            parsed.isProActive &&
-            (/^\d{12}$/.test(cleanedBackupUtr) ||
-              /^\d{12}$/.test(localStorage.getItem("kharche_pro_utr_v1") || ""));
-          setIsProActive(canActivatePro);
-          localStorage.setItem(STORAGE_KEYS.pro, String(canActivatePro));
-        }
+        // Pro access is strictly tied to valid trial period, not unverified UTR strings
+        const trialExpiresAtRaw = localStorage.getItem("kharche_pro_trial_expires_at_v1");
+        const isTrialValid =
+          localStorage.getItem("kharche_pro_trial_v1") === "claimed" &&
+          Number(trialExpiresAtRaw || 0) > Date.now();
+        setIsProActive(isTrialValid);
+        localStorage.setItem(STORAGE_KEYS.pro, String(isTrialValid));
         if (Array.isArray(parsed.unlockedBadgeIds)) {
           const cleanUnlocked = parsed.unlockedBadgeIds.filter(
             (id): id is string => typeof id === "string"

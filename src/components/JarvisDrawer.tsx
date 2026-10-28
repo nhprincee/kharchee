@@ -269,9 +269,12 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
     });
 
     const catMap: Record<string, number> = {};
-    expenses.slice(0, 12).forEach((e) => {
-      catMap[e.category] = (catMap[e.category] || 0) + e.amount;
-    });
+    expenses
+      .filter((e) => e.type !== "income")
+      .slice(0, 12)
+      .forEach((e) => {
+        catMap[e.category] = (catMap[e.category] || 0) + e.amount;
+      });
     const topCategories = Object.entries(catMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
@@ -279,7 +282,7 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
 
     const recentTransactions = expenses.slice(0, 6).map(
       (e) =>
-        `${e.title} - ₹${e.amount} (${e.category}, ${formatTimeShort(
+        `${e.title} - ${e.type === "income" ? "+" : "−"}₹${e.amount} (${e.category}, ${formatTimeShort(
           e.timestamp
         )})`
     );

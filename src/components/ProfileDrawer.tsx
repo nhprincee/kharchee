@@ -91,7 +91,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
 
   // PRO Tier UTR / Transaction Reference Verification State
   const [proUtrInput, setProUtrInput] = useState(() => {
-    return localStorage.getItem("kharche_pro_utr_v1") || "";
+    return localStorage.getItem("kharche_pro_submitted_utr_v1") || localStorage.getItem("kharche_pro_utr_v1") || "";
   });
   const [proUtrError, setProUtrError] = useState("");
 
@@ -677,6 +677,12 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
               {/* PRO Transaction Reference / UTR Number Verification */}
               {!isProActive ? (
                 <div className="pt-2 border-t border-white/10 space-y-2">
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-200 space-y-1">
+                    <p className="font-bold text-amber-300">Payment Verification Limitation</p>
+                    <p className="text-[10px] text-amber-100/80 leading-snug">
+                      A 12-digit UTR format check is not payment verification. Without an integrated payment gateway/webhook to confirm bank receipts, paid Pro status remains unverified.
+                    </p>
+                  </div>
                   <label
                     htmlFor="profile-pro-utr-input"
                     className="block text-[10px] font-mono font-bold uppercase tracking-wider text-amber-300"
@@ -703,35 +709,33 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                       const cleanUtr = proUtrInput.trim();
                       if (!/^\d{12}$/.test(cleanUtr)) {
                         setProUtrError(
-                          "Please enter a valid 12-digit numeric UPI UTR / Reference Number (e.g. 430189234512) to verify and activate PRO."
+                          "Please enter a valid 12-digit numeric UPI UTR / Reference Number (e.g. 430189234512)."
                         );
                         return;
                       }
-                      localStorage.setItem("kharche_pro_utr_v1", cleanUtr);
+                      localStorage.setItem("kharche_pro_submitted_utr_v1", cleanUtr);
                       setProUtrError("");
-                      onTogglePro();
-                      onShowToast(`👑 Verified UTR #${cleanUtr} · PRO Black Edition Activated!`);
+                      onShowToast(`Reference #${cleanUtr} recorded (Payment Unverified · No live gateway connected)`);
                     }}
-                    className={`w-full min-h-[42px] rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all ${theme.buttonBg} ${theme.buttonText}`}
+                    className="w-full min-h-[38px] rounded-xl text-xs font-bold bg-slate-800 border border-amber-400/40 text-amber-300 hover:bg-slate-700 cursor-pointer active:scale-95 transition-all"
                   >
-                    Verify UTR &amp; Activate Black Edition
+                    Submit Reference (Unverified)
                   </button>
+                  <p className="text-[10px] text-slate-400 text-center">
+                    To test Pro features, claim the official 3-Day Free Trial.
+                  </p>
                 </div>
               ) : (
                 <div className="pt-2 border-t border-white/10 space-y-2">
                   <div className="flex items-center justify-between text-[10px] font-mono text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl">
-                    <span>Verified UTR Ref:</span>
+                    <span>PRO Status:</span>
                     <span className="font-bold">
-                      {proUtrInput || localStorage.getItem("kharche_pro_utr_v1") || "UTR-VERIFIED"}
+                      {localStorage.getItem("kharche_pro_trial_v1") === "claimed" ? "3-Day Free Trial Active" : "Active"}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={onTogglePro}
-                    className="w-full min-h-[38px] rounded-2xl text-xs font-black bg-slate-800 border border-amber-400/50 text-amber-300 hover:bg-slate-700 cursor-pointer active:scale-95 transition-all"
-                  >
-                    Manage Subscription (Active)
-                  </button>
+                  <div className="text-[10px] text-slate-400">
+                    Pro tier features unlocked for this session.
+                  </div>
                 </div>
               )}
             </div>
