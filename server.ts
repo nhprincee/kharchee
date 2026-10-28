@@ -642,7 +642,7 @@ function buildGeminiPayload(
   * Percentage: ${percentage}%
   * Recent Expenses: ${recentList}
   * Khata Debts: ${khataList}
-  * CRED Discipline Score: ${disciplineScore} / 900
+  * In-app spending-discipline estimate: ${disciplineScore} / 900 (not a CIBIL or official credit score)
   * Emergency Lockdown: ${lockdownActive ? "ACTIVE (Frozen)" : "Inactive"}
 - Directives:
   * Weave these real numbers naturally into banter instead of giving boring static stats.
@@ -659,7 +659,7 @@ function buildGeminiPayload(
     - If user mentions a friend owing money or giving money to a friend (e.g. 'Kabir owes me 500 for dinner', 'Maine Rohan ko 300 diye', 'I owe Aman 200'), call the addKhataEntry function (positive amount if friend owes user, negative if user owes friend) and confirm the Khata update!
     - If user asks to activate or remove Emergency Lockdown, call setEmergencyLockdown.
     - If user asks to change or set daily budget/limit, call setDailyLimit.
-    - If user asks 'Mera score kaisa hai', review their CRED Discipline Score (${disciplineScore}/900).
+    - If user asks about their score, explain the app-generated spending-discipline estimate (${disciplineScore}/900); never call it a real credit score.
 - Response Style: Crisp, lively, intelligent, with real personality. Keep it to 2-4 punchy sentences so it's enjoyable to read and speak aloud. No markdown asterisk lists or robotic apologies.`;
 
   const turns: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> = [];
@@ -736,10 +736,11 @@ async function startServer() {
       try {
         const reply = await getOpenAIJarvisReply(userPrompt, snapshot, mode, history);
         const text = reply || buildDynamicJarvisReply(userPrompt, snapshot, preDetectedAction);
-        for (const piece of text.match(/.{1,42}(?:\s|$)/g) || [text]) {
+        if (preDetectedAction) res.write(`data: ${JSON.stringify({ type: "action", action: preDetectedAction })}\n\n`);
+        for (let offset = 0; offset < text.length; offset += 42) {
+          const piece = text.slice(offset, offset + 42);
           res.write(`data: ${JSON.stringify({ type: "chunk", text: piece })}\n\n`);
         }
-        if (preDetectedAction) res.write(`data: ${JSON.stringify({ type: "action", action: preDetectedAction })}\n\n`);
         res.write(`data: ${JSON.stringify({ type: "done", fullText: text, source: "openai-gpt-4o" })}\n\n`);
         res.end();
       } catch {
