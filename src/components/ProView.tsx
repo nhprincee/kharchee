@@ -10,7 +10,6 @@ import {
   Flame,
   Sparkles,
   FileDown,
-  QrCode,
   Zap,
   Sliders,
   Volume2,
@@ -21,7 +20,6 @@ import {
   ShieldCheck,
   Clock,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import type { Expense, FanTheme, KhataFriend, ThemeId } from "../types";
 import { ThemeSelector } from "./ThemeSelector";
 import { EpicDebtCardModal } from "./EpicDebtCardModal";
@@ -47,7 +45,7 @@ interface ProViewProps {
     primaryHex: string;
     glowIntensity: number;
   }) => void;
-  onTogglePro: () => void;
+  onPurchasePro: (plan: "monthly" | "quarterly") => Promise<void>;
   onToggleAutoLockdown: () => void;
   onToggleNotifications: () => void;
   onSendTestNotification: () => void;
@@ -79,7 +77,7 @@ export const ProView: React.FC<ProViewProps> = ({
   cardholderName = "MRIGANDER SINGH",
   onSelectTheme,
   onApplyCustomTheme,
-  onTogglePro,
+  onPurchasePro,
   onToggleAutoLockdown,
   onToggleNotifications,
   onSendTestNotification,
@@ -126,13 +124,9 @@ export const ProView: React.FC<ProViewProps> = ({
   // Truecaller-Style Gold / Platinum Elite Carousel & Checkout Drawer State
   const [selectedPlan, setSelectedPlan] = useState<"monthly" | "quarterly">("quarterly");
   const [isCheckoutDrawerOpen, setIsCheckoutDrawerOpen] = useState(false);
-  const [proUtrInput, setProUtrInput] = useState<string>(
-    () => localStorage.getItem("kharche_pro_submitted_utr_v1") || localStorage.getItem("kharche_pro_utr_v1") || ""
-  );
-  const [proUtrError, setProUtrError] = useState<string | null>(null);
+  const [billingBusy, setBillingBusy] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
-  const activeReceivingUpi = (myUpiId || "mrigander@upi").trim();
-  const encodedReceivingUpi = encodeURIComponent(activeReceivingUpi);
   const selectedPlanAmount = selectedPlan === "monthly" ? 39 : 99;
   const selectedPlanTitle =
     selectedPlan === "monthly" ? "PRO GOLD EDITION" : "PRO PLATINUM ELITE";
@@ -140,10 +134,6 @@ export const ProView: React.FC<ProViewProps> = ({
     selectedPlan === "quarterly"
       ? "START 3-MONTH ELITE PASS (₹99)"
       : "START MONTHLY GOLD PASS (₹39)";
-  const proUpiDeepLink = `upi://pay?pa=${encodedReceivingUpi}&pn=KharchePro&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
-  const gpayDeepLink = `tez://upi/pay?pa=${encodedReceivingUpi}&pn=KharchePro&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
-  const phonePeDeepLink = `phonepe://pay?pa=${encodedReceivingUpi}&pn=KharchePro&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
-  const paytmDeepLink = `paytmmp://pay?pa=${encodedReceivingUpi}&pn=KharchePro&am=${selectedPlanAmount}&tn=KharcheProVault&cu=INR`;
 
   // Device orientation listener for subtle mobile 3D card tilt
   useEffect(() => {
@@ -489,17 +479,20 @@ export const ProView: React.FC<ProViewProps> = ({
     playProVaultChime();
     const activePlan = planOverride || selectedPlan;
     setSelectedPlan(activePlan);
-    setProUtrError(null);
+    setBillingError(null);
     setIsCheckoutDrawerOpen(true);
   };
 
-  const handleLaunchUpiApp = (deepLinkUrl: string, appLabel: string) => {
-    playProVaultChime();
-    onShowToast?.(`⚡ Opening ${appLabel} (₹${selectedPlanAmount} → ${activeReceivingUpi})`);
+  const handleSecurePurchase = async () => {
+    setBillingBusy(true);
+    setBillingError(null);
     try {
-      window.location.href = deepLinkUrl;
-    } catch {
-      // QR code remains visible in drawer
+      await onPurchasePro(selectedPlan);
+      setIsCheckoutDrawerOpen(false);
+    } catch (error) {
+      setBillingError(error instanceof Error ? error.message : "Checkout could not be completed.");
+    } finally {
+      setBillingBusy(false);
     }
   };
 
@@ -1486,182 +1479,57 @@ export const ProView: React.FC<ProViewProps> = ({
         </div>
       )}
 
-      {/* SLIDING LUXURY CHECKOUT DRAWER (DYNAMIC UPI INTENT + CLEAN QR + GPAY / PHONEPE / PAYTM) */}
+      {/* VERIFIED SUBSCRIPTION CHECKOUT */}
       {isCheckoutDrawerOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Luxury Vault Checkout Drawer"
-          onClick={() => setIsCheckoutDrawerOpen(false)}
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex items-end justify-center sm:items-center p-0 sm:p-4 animate-in fade-in duration-200"
+          aria-label="Kharchee Pro secure subscription checkout"
+          onClick={() => !billingBusy && setIsCheckoutDrawerOpen(false)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex items-end justify-center sm:items-center p-0 sm:p-4"
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[430px] rounded-t-3xl sm:rounded-3xl bg-[#0b0f17] border-t-2 sm:border-2 border-amber-400/70 shadow-[0_-15px_50px_rgba(0,0,0,0.95),0_0_40px_rgba(251,191,36,0.28)] p-5 space-y-4 text-slate-100 animate-in slide-in-from-bottom-6 duration-250"
+          <section
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-slate-300/20 bg-[#090d13] p-5 text-slate-100 shadow-2xl space-y-4"
           >
-            {/* Top Drag Handle & Header */}
-            <div className="w-10 h-1 rounded-full bg-white/20 mx-auto -mt-1 mb-1" />
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="text-[10px] font-mono font-black uppercase tracking-[0.22em] text-amber-300 block">
-                  SLIDING LUXURY CHECKOUT DRAWER
-                </span>
-                <h3 className="text-base font-black text-white mt-0.5">
-                  {selectedPlanTitle} · ₹{selectedPlanAmount}
-                </h3>
-                <p className="text-[11px] font-mono text-slate-400">
-                  Receiving UPI: <strong className="text-cyan-300">{activeReceivingUpi}</strong>
-                </p>
+                <p className="text-[10px] font-mono font-bold uppercase tracking-[.22em] text-slate-400">Secure Razorpay checkout</p>
+                <h3 className="mt-1 text-lg font-black">{selectedPlanTitle}</h3>
+                <p className="mt-1 text-sm text-slate-300">₹{selectedPlanAmount} {selectedPlan === "monthly" ? "per month" : "every 3 months"}</p>
               </div>
               <button
                 type="button"
+                disabled={billingBusy}
                 onClick={() => setIsCheckoutDrawerOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-900 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+                className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-300 disabled:opacity-40"
+                aria-label="Close checkout"
+              ><X className="h-4 w-4" /></button>
             </div>
 
-            {/* Clean Dynamic QR Code */}
-            <div className="flex flex-col items-center justify-center py-2 bg-[#060911] rounded-2xl border border-amber-400/30">
-              <div className="p-3 rounded-2xl bg-white shadow-[0_0_28px_rgba(251,191,36,0.4)] border-2 border-amber-400">
-                <QRCodeSVG
-                  value={proUpiDeepLink}
-                  size={140}
-                  bgColor="#ffffff"
-                  fgColor="#020617"
-                  level="M"
-                />
-              </div>
-              <span className="text-[10px] font-mono text-amber-200 mt-2">
-                Scan with any UPI app · Instant ₹{selectedPlanAmount} settlement
-              </span>
+            <div className="rounded-2xl border border-slate-300/15 bg-gradient-to-br from-white/[.07] to-transparent p-4 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-100"><ShieldCheck className="h-4 w-4 text-emerald-300" /> Payment verified by the server</div>
+              <p className="text-xs leading-5 text-slate-400">Pro unlocks only after the payment signature and subscription status are verified with Razorpay. Typing a UTR or returning from checkout alone cannot unlock Pro.</p>
             </div>
 
-            {/* 1-Tap Google Pay / PhonePe / Paytm Deep-Links */}
-            <div className="space-y-1.5">
-              <span className="block text-[10px] font-mono font-black uppercase tracking-widest text-slate-400 text-center">
-                1-TAP INSTANT UPI DEEP-LINKS
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                <a
-                  href={gpayDeepLink}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleLaunchUpiApp(gpayDeepLink, "Google Pay");
-                  }}
-                  className="h-9 rounded-xl bg-[#131b2e] hover:bg-[#19233b] border border-cyan-400/50 text-xs font-black text-cyan-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
-                >
-                  <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>GPay</span>
-                </a>
-
-                <a
-                  href={phonePeDeepLink}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleLaunchUpiApp(phonePeDeepLink, "PhonePe");
-                  }}
-                  className="h-9 rounded-xl bg-[#1a132e] hover:bg-[#23193d] border border-purple-400/50 text-xs font-black text-purple-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
-                >
-                  <Zap className="w-3.5 h-3.5 text-purple-400" />
-                  <span>PhonePe</span>
-                </a>
-
-                <a
-                  href={paytmDeepLink}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleLaunchUpiApp(paytmDeepLink, "Paytm");
-                  }}
-                  className="h-9 rounded-xl bg-[#0f2133] hover:bg-[#152c44] border border-sky-400/50 text-xs font-black text-sky-200 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
-                >
-                  <Zap className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Paytm</span>
-                </a>
-              </div>
+            <div className="space-y-2 text-xs text-slate-400">
+              <p>• This is a recurring subscription, not a one-time UPI transfer.</p>
+              <p>• Review the amount and renewal terms in Razorpay Checkout before approving.</p>
+              <p>• If checkout is cancelled or verification fails, your account stays on the free tier.</p>
             </div>
 
-            {/* Payment Verification Limitation Notice */}
-            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs space-y-1">
-              <div className="flex items-center gap-1.5 font-bold text-amber-300">
-                <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/30">NOTICE</span>
-                <span>Payment Verification Limitation</span>
-              </div>
-              <p className="text-[10px] text-amber-100/85 leading-relaxed">
-                A 12-digit UTR format check is not payment verification. Without a server-side merchant payment gateway / webhook to verify bank deposits, paid Pro status remains unverified. To explore Pro features, please use the 3-Day Free Trial.
-              </p>
-            </div>
+            {billingError && <p role="alert" className="rounded-xl border border-rose-400/25 bg-rose-400/5 p-3 text-xs leading-5 text-rose-200">{billingError}</p>}
 
-            {/* Transaction Reference / UTR Number Verification */}
-            <div className="p-3 rounded-2xl bg-[#060911] border border-amber-400/35 space-y-1.5">
-              <label
-                htmlFor="pro-checkout-utr-input"
-                className="block text-[10px] font-mono font-black uppercase tracking-widest text-amber-300"
-              >
-                Enter Transaction Reference / UTR Number
-              </label>
-              <input
-                id="pro-checkout-utr-input"
-                type="text"
-                value={proUtrInput}
-                onChange={(e) => {
-                  setProUtrInput(e.target.value);
-                  if (proUtrError) setProUtrError(null);
-                }}
-                placeholder="Enter 12-digit UPI Ref / UTR Number (e.g. 429810394812)"
-                className="w-full h-10 px-3 rounded-xl bg-slate-950 border border-amber-400/40 text-xs font-mono text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-              />
-              {proUtrError ? (
-                <p className="text-[10px] font-mono text-rose-400 font-bold">
-                  {proUtrError}
-                </p>
-              ) : (
-                <p className="text-[10px] text-slate-400 leading-tight">
-                  Submit your 12-digit UPI reference ID. Reference will be recorded locally (Unverified without live payment gateway).
-                </p>
-              )}
-            </div>
-
-            {/* Confirm & Unlock Vault Action */}
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
-              <a
-                href={proUpiDeepLink}
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleLaunchUpiApp(proUpiDeepLink, "Default UPI App");
-                }}
-                className="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 border border-amber-400/40 text-amber-300 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>UPI Intent</span>
-              </a>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const cleanedUtr = proUtrInput.trim();
-                  if (!/^\d{12}$/.test(cleanedUtr)) {
-                    setProUtrError(
-                      "Please enter a valid 12-digit numeric UPI UTR / Reference Number (e.g. 429810394812)."
-                    );
-                    return;
-                  }
-                  localStorage.setItem("kharche_pro_submitted_utr_v1", cleanedUtr);
-                  setProUtrError(null);
-                  playProVaultChime();
-                  setIsCheckoutDrawerOpen(false);
-                  onShowToast?.(
-                    `Reference #${cleanedUtr} recorded (Payment Unverified · No live gateway connected)`
-                  );
-                }}
-                className="h-11 rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-amber-300 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(251,191,36,0.25)] cursor-pointer active:scale-95 transition-transform"
-              >
-                <Check className="w-4 h-4 stroke-[3]" />
-                <span>Submit Ref (Unverified)</span>
-              </button>
-            </div>
-          </div>
+            <button
+              type="button"
+              onClick={() => void handleSecurePurchase()}
+              disabled={billingBusy}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-200/50 bg-gradient-to-r from-slate-100 to-slate-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+            >
+              {billingBusy ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" /> Verifying checkout…</> : <><ShieldCheck className="h-4 w-4" /> Continue to secure payment · ₹{selectedPlanAmount}</>}
+            </button>
+            <button type="button" disabled={billingBusy} onClick={() => setIsCheckoutDrawerOpen(false)} className="w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-200 disabled:opacity-40">Not now</button>
+          </section>
         </div>
       )}
 
