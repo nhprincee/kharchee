@@ -51,6 +51,7 @@ import { KhataView } from "./components/KhataView";
 import { ProView } from "./components/ProView";
 import { JarvisDrawer } from "./components/JarvisDrawer";
 import { ProfileDrawer } from "./components/ProfileDrawer";
+import { signOutCurrentUser } from "./components/AuthGate";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { AppTour } from "./components/AppTour";
 import { ProTrialModal } from "./components/ProTrialModal";
@@ -2139,6 +2140,7 @@ export function App() {
           onOpenRewardVault={() => setIsRewardVaultOpen(true)}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+            onSignOut={signOutCurrentUser}
         />
 
         {/* Stark Reward Vault (Daily Discipline Cyber Roulette Wheel) */}
