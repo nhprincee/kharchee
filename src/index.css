@@ -165,3 +165,57 @@
     scroll-behavior: auto !important;
   }
 }
+
+
+/* KHARCHEE — premium, calmer finance dashboard */
+:root {
+  color-scheme: dark;
+  --kh-bg: #080b12;
+  --kh-surface: #101722;
+  --kh-surface-raised: #141e2b;
+  --kh-border: rgba(203, 213, 225, 0.11);
+  --kh-mint: #6ee7b7;
+  --kh-blue: #93c5fd;
+}
+html, body, #root { min-height: 100%; }
+html { background: var(--kh-bg); scrollbar-gutter: stable; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(ellipse at 82% 0%, rgba(16, 185, 129, 0.075), transparent 36rem),
+    radial-gradient(ellipse at 0% 28%, rgba(59, 130, 246, 0.055), transparent 30rem),
+    var(--kh-bg);
+  color: #f1f5f9;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { color: #07130f; background: rgba(110, 231, 183, 0.85); }
+button, input, textarea, select { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid rgba(110, 231, 183, 0.85);
+  outline-offset: 2px;
+}
+main { isolation: isolate; }
+main [class*="rounded-2xl"][class*="border"][class*="bg-"] {
+  border-color: var(--kh-border);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+main [class*="rounded-2xl"][class*="border"][class*="bg-"]:hover {
+  border-color: rgba(110, 231, 183, 0.22);
+}
+main [class*="text-indigo-300"], main [class*="text-indigo-400"] {
+  color: var(--kh-mint) !important;
+}
+main [class*="border-indigo-500/50"], main [class*="border-indigo-500/40"] {
+  border-color: rgba(110, 231, 183, 0.28) !important;
+}
+main [class*="bg-indigo-500/15"], main [class*="bg-indigo-500/20"] {
+  background-color: rgba(16, 185, 129, 0.11) !important;
+}
+main [class*="text-cyan-300"], main [class*="text-cyan-400"] { color: #7dd3fc !important; }
+input, textarea, select { color: #f1f5f9; }
+input::placeholder, textarea::placeholder { color: #64748b; }
+@media (max-width: 767px) { main { scroll-padding-bottom: 5rem; } }
+@media (prefers-reduced-motion: reduce) { html:focus-within { scroll-behavior: auto; } }
