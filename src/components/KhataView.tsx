@@ -232,6 +232,9 @@ export const KhataView: React.FC<KhataViewProps> = ({
       .join(", ");
 
     const recipientUpi = myUpiId.trim();
+    if (!recipientUpi) {
+      return "Hey " + friend.name.split(" ")[0] + "! ₹" + netAmount + " is pending. Add your receiving UPI ID in settings to include a payment link.";
+    }
     const upiPayLink = `upi://pay?pa=${encodeURIComponent(recipientUpi)}&pn=Kharchee&am=${Math.abs(
       netAmount
     )}&tn=KharcheKhata&cu=INR`;
@@ -262,13 +265,14 @@ export const KhataView: React.FC<KhataViewProps> = ({
     const signedAmount = entryDirection === "gave" ? Math.round(amt) : -Math.round(amt);
 
     if (selectedFriendId === "new") {
-      if (!newFriendName.trim()) {
-        setFormError("Enter friend's name.");
+      const cleanPhone = newFriendPhone.replace(/\D/g, "");
+      if (!newFriendName.trim() || cleanPhone.length < 10) {
+        setFormError("Enter a name and valid WhatsApp number.");
         return;
       }
       onAddFriendAndEntry(
         newFriendName.trim(),
-        newFriendPhone.replace(/\D/g, ""),
+        cleanPhone,
         entryDesc.trim(),
         signedAmount,
         newFriendUpi.trim() || undefined
@@ -422,7 +426,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
           style={{
             borderColor: `${theme.accentHex}40`,
           }}
-          className="h-8 px-3 rounded-xl bg-slate-950 border text-xs font-bold text-slate-100 flex items-center gap-1.5 cursor-pointer hover:bg-slate-800 transition-all active:scale-95 shadow-2xs"
+          className="h-8 px-3 rounded-xl bg-slate-950 border text-xs font-bold text-slate-100 flex items-center gap-1.5 cursor-pointer hover:bg-slate-800 transition-all active:scale-95 shadow-2xs disabled:cursor-not-allowed disabled:opacity-40"
         >
           <QrCode className="w-3.5 h-3.5 text-cyan-400" />
           <span>{myUpiId.trim() ? "Show My QR" : "Add UPI for QR"}</span>
