@@ -15,7 +15,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 function getGenAIClient(): GoogleGenAI | null {
   const key = process.env.GEMINI_API_KEY;
-  if (!key || key === "MY_GEMINI_API_KEY" || key.trim() === "") {
+  if (!key || key === "MY_GEMINI_API_KEY" || key.startsWith("your_") || key.trim() === "") {
     return null;
   }
   return new GoogleGenAI({
