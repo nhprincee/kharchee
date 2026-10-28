@@ -962,7 +962,10 @@ async function startServer() {
           db.collection("users").doc(uid).collection("billing").doc("current").set(state, { merge: true }),
         ]);
       }
-      if (eventId) {\n        await db.collection("billingWebhookEvents").doc(eventId).set({ event: event.event || "unknown", receivedAt: FieldValue.serverTimestamp() });\n      }\n      res.status(200).json({ received: true });
+      if (eventId) {
+        await db.collection("billingWebhookEvents").doc(eventId).set({ event: event.event || "unknown", receivedAt: FieldValue.serverTimestamp() });
+      }
+      res.status(200).json({ received: true });
     } catch {
       res.status(500).send("Webhook processing failed.");
     }
