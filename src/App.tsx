@@ -64,6 +64,11 @@ import {
   sendKharcheNotification,
 } from "./utils/notifications";
 
+function scopedStorageKey(key: string): string {
+  const uid = localStorage.getItem("kharche_current_user_uid") || "unverified";
+  return `${uid}:${key}`;
+}
+
 const STORAGE_KEYS = {
   expenses: "kharche_expenses_v1",
   khata: "kharche_khata_v1",
@@ -181,7 +186,7 @@ export function App() {
 
   // Persistent State
   const [dailyLimit, setDailyLimit] = useState<number>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.dailyLimit);
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.dailyLimit));
     const parsed = saved ? Number(saved) : NaN;
     if (Number.isFinite(parsed) && parsed >= 50 && parsed <= 1000000) {
       return Math.round(parsed);
@@ -190,7 +195,7 @@ export function App() {
   });
 
   const [expenses, setExpenses] = useState<Expense[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.expenses);
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.expenses));
     if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
@@ -205,7 +210,7 @@ export function App() {
   });
 
   const [khataFriends, setKhataFriends] = useState<KhataFriend[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.khata);
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.khata));
     if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
@@ -220,11 +225,11 @@ export function App() {
   });
 
   const [lockdownActive, setLockdownActive] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEYS.lockdown) === "true";
+    return localStorage.getItem(scopedStorageKey(STORAGE_KEYS.lockdown)) === "true";
   });
 
   const [themeId, setThemeId] = useState<ThemeId>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.theme);
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.theme));
     return "stark";
   });
 
@@ -245,18 +250,18 @@ export function App() {
       if (Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() <= expiresAt) {
         return true;
       }
-      localStorage.setItem(STORAGE_KEYS.pro, "false");
+      localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), "false");
       return false;
     }
     return false;
   });
 
   const [autoLockdownAt90, setAutoLockdownAt90] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEYS.autoLockdown) === "true";
+    return localStorage.getItem(scopedStorageKey(STORAGE_KEYS.autoLockdown)) === "true";
   });
 
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.notifications);
+    const saved = localStorage.getItem(scopedStorageKey(STORAGE_KEYS.notifications));
     return saved !== null ? saved === "true" : true;
   });
 
@@ -290,7 +295,7 @@ export function App() {
     }
   });
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEYS.onboarding) !== "true";
+    return localStorage.getItem(scopedStorageKey(STORAGE_KEYS.onboarding)) !== "true";
   });
   const [isTourActive, setIsTourActive] = useState(false);
   const [isProTeaserOpen, setIsProTeaserOpen] = useState(false);
@@ -518,7 +523,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.dailyLimit, String(dailyLimit));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(dailyLimit));
   }, [dailyLimit]);
 
   useEffect(() => {
@@ -526,31 +531,31 @@ export function App() {
   }, [myUpiId]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(expenses));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.expenses), JSON.stringify(expenses));
   }, [expenses]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.khata, JSON.stringify(khataFriends));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.khata), JSON.stringify(khataFriends));
   }, [khataFriends]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.lockdown, String(lockdownActive));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.lockdown), String(lockdownActive));
   }, [lockdownActive]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.theme, themeId);
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.theme), themeId);
   }, [themeId]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.pro, String(isProActive));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(isProActive));
   }, [isProActive]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.autoLockdown, String(autoLockdownAt90));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.autoLockdown), String(autoLockdownAt90));
   }, [autoLockdownAt90]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.notifications, String(notificationsEnabled));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.notifications), String(notificationsEnabled));
   }, [notificationsEnabled]);
 
   /**
@@ -767,11 +772,11 @@ export function App() {
     dailyLimit: number;
     notificationsEnabled: boolean;
   }) => {
-    localStorage.setItem(STORAGE_KEYS.onboarding, "true");
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.onboarding), "true");
     localStorage.setItem("kharche_user_name_v1", data.userName);
     localStorage.setItem("kharche_user_email_v1", data.email);
     localStorage.setItem(
-      STORAGE_KEYS.financialProfile,
+          scopedStorageKey(STORAGE_KEYS.financialProfile),
       JSON.stringify({
         income: data.monthlyIncome,
         savings: data.savingsTarget,
@@ -779,9 +784,9 @@ export function App() {
       })
     );
     setDailyLimit(data.dailyLimit);
-    localStorage.setItem(STORAGE_KEYS.dailyLimit, String(data.dailyLimit));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(data.dailyLimit));
     setNotificationsEnabled(data.notificationsEnabled);
-    localStorage.setItem(STORAGE_KEYS.notifications, String(data.notificationsEnabled));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.notifications), String(data.notificationsEnabled));
 
     setIsOnboardingOpen(false);
     // Transition to Interactive App Tour
@@ -803,7 +808,7 @@ export function App() {
   const handleClaimProTrial = () => {
     const expiresAt = Date.now() + 72 * 60 * 60 * 1000;
     setIsProActive(true);
-    localStorage.setItem(STORAGE_KEYS.pro, "true");
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), "true");
     localStorage.setItem("kharche_pro_trial_v1", "claimed");
     localStorage.setItem("kharche_pro_trial_expires_at_v1", String(expiresAt));
     setIsProTeaserOpen(false);
@@ -972,9 +977,9 @@ export function App() {
 
   const handleResetAllExpenses = () => {
     setExpenses([]);
-    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify([]));
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.expenses), JSON.stringify([]));
     setLockdownActive(false);
-    localStorage.setItem(STORAGE_KEYS.lockdown, "false");
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.lockdown), "false");
     showToast("All expense records cleared");
   };
 
@@ -1199,12 +1204,12 @@ export function App() {
           }
           validExpensesCount = validatedExpenses.length;
           setExpenses(validatedExpenses);
-          localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(validatedExpenses));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.expenses), JSON.stringify(validatedExpenses));
         }
         if (Array.isArray(parsed.khataFriends)) {
           const validatedFriends = parsed.khataFriends.filter(isValidKhataFriend);
           setKhataFriends(validatedFriends);
-          localStorage.setItem(STORAGE_KEYS.khata, JSON.stringify(validatedFriends));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.khata), JSON.stringify(validatedFriends));
         }
         if (
           typeof parsed.dailyLimit === "number" &&
@@ -1213,17 +1218,17 @@ export function App() {
           parsed.dailyLimit <= 1000000
         ) {
           setDailyLimit(Math.round(parsed.dailyLimit));
-          localStorage.setItem(STORAGE_KEYS.dailyLimit, String(Math.round(parsed.dailyLimit)));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(Math.round(parsed.dailyLimit)));
         }
         setThemeId("stark");
-        localStorage.setItem(STORAGE_KEYS.theme, "stark");
+        localStorage.setItem(scopedStorageKey(STORAGE_KEYS.theme), "stark");
         if (typeof parsed.lockdownActive === "boolean") {
           setLockdownActive(parsed.lockdownActive);
-          localStorage.setItem(STORAGE_KEYS.lockdown, String(parsed.lockdownActive));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.lockdown), String(parsed.lockdownActive));
         }
         if (typeof parsed.autoLockdownAt90 === "boolean") {
           setAutoLockdownAt90(parsed.autoLockdownAt90);
-          localStorage.setItem(STORAGE_KEYS.autoLockdown, String(parsed.autoLockdownAt90));
+          localStorage.setItem(scopedStorageKey(STORAGE_KEYS.autoLockdown), String(parsed.autoLockdownAt90));
         }
         if (typeof parsed.myUpiId === "string" && parsed.myUpiId.includes("@")) {
           setMyUpiId(parsed.myUpiId.trim());
@@ -1240,7 +1245,7 @@ export function App() {
           localStorage.getItem("kharche_pro_trial_v1") === "claimed" &&
           Number(trialExpiresAtRaw || 0) > Date.now();
         setIsProActive(isTrialValid);
-        localStorage.setItem(STORAGE_KEYS.pro, String(isTrialValid));
+        localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(isTrialValid));
         if (Array.isArray(parsed.unlockedBadgeIds)) {
           const cleanUnlocked = parsed.unlockedBadgeIds.filter(
             (id): id is string => typeof id === "string"
@@ -2020,12 +2025,12 @@ export function App() {
               playQuickAddChirp();
             }
             setLockdownActive(active);
-            localStorage.setItem(STORAGE_KEYS.lockdown, String(active));
+            localStorage.setItem(scopedStorageKey(STORAGE_KEYS.lockdown), String(active));
             showToast(active ? "🚨 Emergency Lockdown ACTIVATED by JARVIS" : "🛡️ Lockdown lifted by JARVIS");
           }}
           onUpdateDailyLimit={(newLimit) => {
             setDailyLimit(newLimit);
-            localStorage.setItem(STORAGE_KEYS.dailyLimit, String(newLimit));
+            localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(newLimit));
             showToast(`Daily budget set to ₹${newLimit} by JARVIS`);
           }}
           onAddKhataEntry={(friendName, amount, description) => {
@@ -2119,14 +2124,14 @@ export function App() {
           onClose={() => setIsProfileOpen(false)}
           onUpdateDailyLimit={(newLimit) => {
             setDailyLimit(newLimit);
-            localStorage.setItem(STORAGE_KEYS.dailyLimit, String(newLimit));
+            localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dailyLimit), String(newLimit));
             showToast(`Daily budget set to ₹${newLimit}`);
           }}
           onResetExpenses={handleResetAllExpenses}
           onTogglePro={() => {
             const next = !isProActive;
             setIsProActive(next);
-            localStorage.setItem(STORAGE_KEYS.pro, String(next));
+            localStorage.setItem(scopedStorageKey(STORAGE_KEYS.pro), String(next));
             showToast(next ? "KHARCHE PRO Black Active" : "Standard Tier");
           }}
           onShowToast={showToast}
