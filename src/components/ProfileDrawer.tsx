@@ -50,7 +50,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   todaySpent,
   streakDays,
   isProActive,
-  myUpiId = "mrigander@upi",
+  myUpiId = "",
   pinnedBadgeIds = ["iron-discipline", "zero-leak-legend"],
   onClose,
   onUpdateDailyLimit,
@@ -67,14 +67,13 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
 
   // User Profile State
   const [userName, setUserName] = useState(() => {
-    return localStorage.getItem("kharche_user_name_v1") || "";
+    const saved = localStorage.getItem("kharche_user_name_v1") || "";
+    return saved === "Mrigander Singh" ? "" : saved;
   });
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(userName);
 
-  const [isLoggedInWithGoogle, setIsLoggedInWithGoogle] = useState(false);
-
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  
 
   // Danger Zone Double-Tap Safety Lock State
   const [resetArmTimer, setResetArmTimer] = useState<number | null>(null);
@@ -157,17 +156,6 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   };
 
   // Google Auth Handlers
-  const handleGoogleLogin = () => {
-    setIsLoggedInWithGoogle(true);
-    onShowToast("Signed in as Mrigander Singh with Google");
-  };
-
-  const handleLogout = () => {
-    setIsLoggedInWithGoogle(false);
-    setShowLogoutConfirm(false);
-    onShowToast("Logged out of Google account");
-  };
-
   // Quick Daily Limit Save
   const handleSaveLimit = (newVal: number) => {
     if (newVal >= 50 && newVal <= 100000) {
