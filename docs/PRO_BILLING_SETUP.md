@@ -14,7 +14,7 @@ The application code now supports Razorpay recurring subscriptions with server-s
 
 Create these recurring plans in the Razorpay Dashboard (use Test Mode first):
 
-- **Kharchee Pro Monthly:** ₹39 every month.
+- **Kharchee Pro Monthly:** ₹30 every month (approximately ₹1/day equivalent; billed monthly, not daily).
 - **Kharchee Pro Quarterly:** ₹99 every 3 months.
 
 Copy each plan's ID into the server environment:
@@ -22,7 +22,7 @@ Copy each plan's ID into the server environment:
 - `RAZORPAY_MONTHLY_PLAN_ID`
 - `RAZORPAY_QUARTERLY_PLAN_ID`
 
-The server expects the plan IDs to match those exact prices and billing intervals. The configured subscription cycle limits are 120 monthly cycles and 40 quarterly cycles.
+The server expects the monthly plan to be exactly ₹30 (3000 paise) every month and the quarterly plan to be exactly ₹99 (9900 paise) every 3 months. The ₹1/day wording is an affordability comparison only; customers are charged monthly. The configured subscription cycle limits are 120 monthly cycles and 40 quarterly cycles.
 
 Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` from the same Razorpay mode. Only the public Key ID is sent to the browser; the secret must remain private.
 
