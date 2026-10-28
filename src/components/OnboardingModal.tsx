@@ -32,14 +32,14 @@ interface OnboardingModalProps {
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   isOpen,
   theme,
-  initialIncome = 25000,
+  initialIncome = 0,
   onComplete,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Step 1: User Profile & Auth
-  const [userName, setUserName] = useState("Mrigander Singh");
-  const [userEmail, setUserEmail] = useState("mrigandersinghrajput@gmail.com");
+  const [userName, setUserName] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const [authMethod, setAuthMethod] = useState<"google" | "custom">("google");
 
   // Step 2: Financial Calibration
@@ -90,8 +90,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
   const handleGoogleSignIn = () => {
     setAuthMethod("google");
-    setUserName("Mrigander Singh");
-    setUserEmail("mrigandersinghrajput@gmail.com");
     setStep(2);
   };
 
