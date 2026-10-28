@@ -43,6 +43,11 @@ interface ProfileDrawerProps {
   onImportBackup?: (file: File) => void;
 }
 
+function scopedProfileKey(key: string): string {
+  const uid = localStorage.getItem("kharche_current_user_uid") || "unverified";
+  return `${uid}:${key}`;
+}
+
 export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   isOpen,
   theme,
@@ -67,7 +72,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
 
   // User Profile State
   const [userName, setUserName] = useState(() => {
-    const saved = localStorage.getItem("kharche_user_name_v1") || "";
+    const saved = localStorage.getItem(scopedProfileKey("kharche_user_name_v1")) || "";
     return saved === "Mrigander Singh" ? "" : saved;
   });
   const [isEditingName, setIsEditingName] = useState(false);
@@ -87,7 +92,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
 
   // PRO Tier UTR / Transaction Reference Verification State
   const [proUtrInput, setProUtrInput] = useState(() => {
-    return localStorage.getItem("kharche_pro_submitted_utr_v1") || localStorage.getItem("kharche_pro_utr_v1") || "";
+    return localStorage.getItem(scopedProfileKey("kharche_pro_submitted_utr_v1")) || localStorage.getItem(scopedProfileKey("kharche_pro_utr_v1")) || "";
   });
   const [proUtrError, setProUtrError] = useState("");
 
@@ -112,7 +117,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   }, [resetArmTimer]);
 
   useEffect(() => {
-    localStorage.setItem("kharche_user_name_v1", userName);
+    localStorage.setItem(scopedProfileKey("kharche_user_name_v1"), userName);
   }, [userName]);
 
   // Dynamic CRED-Style Financial Discipline Score Calculation (300 to 900 scale)
@@ -574,7 +579,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                         );
                         return;
                       }
-                      localStorage.setItem("kharche_pro_submitted_utr_v1", cleanUtr);
+                      localStorage.setItem(scopedProfileKey("kharche_pro_submitted_utr_v1"), cleanUtr);
                       setProUtrError("");
                       onShowToast(`Reference #${cleanUtr} recorded (Payment Unverified · No live gateway connected)`);
                     }}
@@ -591,7 +596,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                   <div className="flex items-center justify-between text-[10px] font-mono text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl">
                     <span>PRO Status:</span>
                     <span className="font-bold">
-                      {localStorage.getItem("kharche_pro_trial_v1") === "claimed" ? "3-Day Free Trial Active" : "Active"}
+                      {localStorage.getItem(scopedProfileKey("kharche_pro_trial_v1")) === "claimed" ? "3-Day Free Trial Active" : "Active"}
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-400">
