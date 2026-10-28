@@ -1323,11 +1323,11 @@ export function App() {
     navItems.find((item) => item.id === activeTab)?.pageTitle || "Dashboard Overview";
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 flex">
+    <div className="min-h-screen bg-[#080b12] text-slate-100 flex">
       {/* DESKTOP SIDEBAR NAVIGATION (md+ SaaS Workspace Canvas) */}
       <aside
         aria-label="Sidebar Navigation"
-        className="hidden md:flex w-64 shrink-0 flex-col justify-between bg-[#080c14] border-r border-slate-800/90 p-4 sticky top-0 h-screen z-40"
+        className="hidden md:flex w-64 shrink-0 flex-col justify-between bg-[#0b1019] border-r border-white/[0.07] p-4 sticky top-0 h-screen z-40"
       >
         <div className="space-y-6">
           {/* Brand Header */}
@@ -1387,7 +1387,7 @@ export function App() {
         </div>
 
         {/* Bottom Sidebar Actions: Quick Add & Jarvis AI Assistant */}
-        <div className="space-y-2.5 pt-4 border-t border-slate-800/80">
+        <div className="space-y-2.5 pt-4 border-t border-white/[0.07]">
           <button
             type="button"
             onClick={handleOpenAddExpenseModal}
@@ -1399,7 +1399,7 @@ export function App() {
           <button
             type="button"
             onClick={handleOpenJarvisWithBootSequence}
-            className="w-full py-2.5 px-3 rounded-xl bg-[#0c1220] hover:bg-slate-900 border border-slate-800 text-xs font-semibold text-indigo-300 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            className="w-full py-2.5 px-3 rounded-xl bg-[#101722] hover:bg-slate-900 border border-slate-800 text-xs font-semibold text-indigo-300 flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <Zap className="w-3.5 h-3.5 text-indigo-400" />
             <span>Ask J.A.R.V.I.S. AI</span>
@@ -1408,7 +1408,7 @@ export function App() {
       </aside>
 
       {/* MAIN RESPONSIVE VIEWPORT */}
-      <div className="flex-1 min-w-0 min-h-screen bg-[#070b14] flex flex-col relative overflow-x-hidden">
+      <div className="flex-1 min-w-0 min-h-screen bg-[#080b12] flex flex-col relative overflow-x-hidden">
         <ThemeBackdrop theme={theme} />
 
         {/* TOP SAAS HEADER */}
@@ -1441,16 +1441,16 @@ export function App() {
         />
 
         {/* Contextual Utility Bar */}
-        <div className="px-4 sm:px-6 py-2 bg-[#080c14] border-b border-slate-800/80 flex items-center justify-between gap-2 shrink-0 relative z-30">
+        <div className="px-4 sm:px-6 py-2 bg-[#0b1019]/95 border-b border-white/[0.07] flex items-center justify-between gap-2 shrink-0 relative z-30 backdrop-blur-xl">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar whitespace-nowrap pr-1">
-            <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-[11px] font-medium text-slate-300 font-mono shrink-0">
+            <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#131c29] border border-slate-800 text-[11px] font-medium text-slate-300 font-mono shrink-0">
               {formatLiveHeaderDate(now)}
             </div>
 
             <button
               type="button"
               onClick={() => void checkClipboardForTransactions(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#131c29] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
               title="Paste Bank SMS"
             >
               <span>Paste Bank SMS</span>
@@ -1459,7 +1459,7 @@ export function App() {
             <button
               type="button"
               onClick={handleTriggerFakeMomCall}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#131c29] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
               title="Bail Me Out (Simulated Call)"
             >
               <PhoneIncoming className="w-3 h-3 text-indigo-400" />
@@ -1469,7 +1469,7 @@ export function App() {
             <button
               type="button"
               onClick={() => triggerStarkMorningBriefing(dailyLimit)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#131c29] border border-slate-800 text-slate-300 hover:border-indigo-500/40 hover:text-white transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
               title="Morning Audio Briefing"
             >
               <span>Briefing</span>
@@ -1503,7 +1503,7 @@ export function App() {
             role="status"
             aria-label="Stark Morning Telemetry Briefing"
             onClick={() => setIsMorningBriefingOpen(false)}
-            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/50 bg-[#0c1220] shadow-xl relative z-40 animate-in fade-in slide-in-from-top-3 duration-300 cursor-pointer overflow-hidden"
+            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/50 bg-[#101722] shadow-xl relative z-40 animate-in fade-in slide-in-from-top-3 duration-300 cursor-pointer overflow-hidden"
           >
             <div className="flex items-start justify-between gap-2.5">
               <div className="flex items-center gap-2.5">
@@ -1550,7 +1550,7 @@ export function App() {
           <aside
             role="alert"
             aria-label="Detected Banking Transaction"
-            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/40 bg-[#0c1220] shadow-xl relative z-30 animate-in slide-in-from-top-2 duration-300"
+            className="mx-4 sm:mx-6 my-2 p-3.5 rounded-2xl border border-indigo-500/40 bg-[#101722] shadow-xl relative z-30 animate-in slide-in-from-top-2 duration-300"
           >
             <div className="flex items-start justify-between gap-2.5">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1670,7 +1670,7 @@ export function App() {
                 </div>
 
                 {recentExpenses.length === 0 ? (
-                  <div className="p-8 rounded-2xl border border-slate-800 bg-[#0c1220] text-center space-y-3">
+                  <div className="p-8 rounded-2xl border border-slate-800 bg-[#101722] text-center space-y-3">
                     <p className="text-sm font-semibold text-slate-200">
                       No transactions recorded yet
                     </p>
