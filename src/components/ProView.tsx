@@ -130,13 +130,13 @@ export const ProView: React.FC<ProViewProps> = ({
   const [isCancelling, setIsCancelling] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
 
-  const selectedPlanAmount = selectedPlan === "monthly" ? 39 : 99;
+  const selectedPlanAmount = selectedPlan === "monthly" ? 30 : 99;
   const selectedPlanTitle =
     selectedPlan === "monthly" ? "PRO GOLD EDITION" : "PRO PLATINUM ELITE";
   const selectedPlanCtaLabel =
     selectedPlan === "quarterly"
       ? "START 3-MONTH ELITE PASS (₹99)"
-      : "START MONTHLY GOLD PASS (₹39)";
+      : "START MONTHLY GOLD PASS (₹30 · ₹1/day equivalent)";
 
   // Device orientation listener for subtle mobile 3D card tilt
   useEffect(() => {
@@ -713,7 +713,7 @@ export const ProView: React.FC<ProViewProps> = ({
 
         {/* Truecaller Gold / Platinum Swipeable Card Carousel (No Clipping) */}
         <div className="flex gap-4 overflow-x-auto py-2 px-1 -mx-1 snap-x snap-mandatory scrollbar-none">
-          {/* Card 1: PRO GOLD (₹39) — Rich warm liquid gold gradient with crisp 24K gold border */}
+          {/* Card 1: PRO GOLD (₹30/month, about ₹1/day) — Rich warm liquid gold gradient */}
           <div
             onClick={() => {
               playProVaultChime();
@@ -766,13 +766,10 @@ export const ProView: React.FC<ProViewProps> = ({
 
               <div className="flex items-baseline gap-1.5 pt-0.5">
                 <span className="font-mono text-2xl font-black text-amber-300 drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)] tabular-nums">
-                  ₹39
-                </span>
-                <span className="font-mono text-xs text-amber-200/50 line-through tabular-nums">
-                  ₹99
+                  ₹30
                 </span>
                 <span className="text-[11px] font-mono text-amber-100/90 font-semibold">
-                  / month
+                  / month · about ₹1/day
                 </span>
               </div>
             </div>
@@ -824,7 +821,7 @@ export const ProView: React.FC<ProViewProps> = ({
               <div className="flex items-center justify-between gap-1.5">
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-gradient-to-r from-amber-300 via-yellow-400 to-cyan-300 text-black font-mono text-[9px] font-black uppercase tracking-widest shadow-[0_0_14px_rgba(6,182,212,0.5)]">
                   <Sparkles className="w-3 h-3 fill-black text-black" />
-                  <span>SAVE 15% · 3-MONTH ELITE</span>
+                  <span>3-MONTH ELITE</span>
                 </span>
                 <span
                   className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
@@ -848,11 +845,8 @@ export const ProView: React.FC<ProViewProps> = ({
                 <span className="font-mono text-2xl font-black text-white drop-shadow-[0_0_10px_rgba(6,182,212,0.5)] tabular-nums">
                   ₹99
                 </span>
-                <span className="font-mono text-xs text-slate-300/60 line-through tabular-nums">
-                  ₹117
-                </span>
                 <span className="text-[10px] font-mono text-amber-300 font-bold">
-                  / 3 Months (Save 15%)
+                  / 3 Months · ₹33/month
                 </span>
               </div>
             </div>
