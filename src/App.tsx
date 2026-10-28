@@ -875,7 +875,8 @@ export function App() {
       throw new Error(checkout.error || "Could not start secure checkout.");
     }
     await loadRazorpayCheckout();
-    if (!window.Razorpay) throw new Error("Secure checkout is unavailable.");
+    const RazorpayConstructor = window.Razorpay;
+    if (!RazorpayConstructor) throw new Error("Secure checkout is unavailable.");
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       const fail = (error: Error) => {
@@ -883,7 +884,7 @@ export function App() {
         settled = true;
         reject(error);
       };
-      const razorpay = new window.Razorpay!({
+      const razorpay = new RazorpayConstructor({
         key: checkout.keyId!,
         subscription_id: checkout.subscriptionId!,
         name: "Kharchee Pro",
@@ -912,6 +913,21 @@ export function App() {
       razorpay.on("payment.failed", (failure) => fail(new Error(failure.error?.description || "Payment failed. No Pro access was granted.")));
       razorpay.open();
     });
+  };
+
+  const handleCancelPro = async (): Promise<void> => {
+    const token = await getCurrentUserIdToken();
+    if (!token) throw new Error("Please sign in again to manage your subscription.");
+    const response = await fetch("/api/billing/cancel", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token },
+    });
+    const result = await response.json() as { cancelled?: boolean; active?: boolean; currentPeriodEnd?: number | null; error?: string };
+    if (!response.ok || result.cancelled !== true) throw new Error(result.error || "Could not cancel auto-renewal.");
+    setIsProActive(result.active === true);
+    showToast(result.active
+      ? "Auto-renewal cancelled. Pro remains active until the current paid period ends."
+      : "Pro subscription cancelled.");
   };
 
   const handleReplayTour = () => {
@@ -1900,6 +1916,7 @@ export function App() {
                 setCustomThemeOverride(custom);
               }}
               onPurchasePro={handlePurchasePro}
+              onCancelPro={handleCancelPro}
               onToggleAutoLockdown={() => setAutoLockdownAt90((v) => !v)}
               onToggleNotifications={handleToggleNotifications}
               onSendTestNotification={handleSendTestNotification}
