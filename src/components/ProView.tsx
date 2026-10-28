@@ -892,6 +892,8 @@ export const ProView: React.FC<ProViewProps> = ({
         </button>
       </section>
 
+      {isProActive ? (
+        <>
       {/* =====================================================================
           3. PRO-EXCLUSIVE FEATURE SUITE (ELEVATED FLOATING GLASS CONTAINERS)
          ===================================================================== */}
@@ -1477,6 +1479,18 @@ export const ProView: React.FC<ProViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+
+        </>
+      ) : (
+        <section className="rounded-2xl border border-slate-300/15 bg-gradient-to-br from-white/[.06] to-transparent p-5 text-center space-y-3">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-slate-300/20 bg-white/[.05]">
+            <Lock className="h-5 w-5 text-slate-200" />
+          </div>
+          <h3 className="text-base font-black text-white">Pro features are locked</h3>
+          <p className="mx-auto max-w-sm text-xs leading-5 text-slate-400">Preview the plans above. The feature suite opens only after the server confirms a valid subscription.</p>
+        </section>
       )}
 
       {/* VERIFIED SUBSCRIPTION CHECKOUT */}
