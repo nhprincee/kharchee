@@ -683,13 +683,18 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
 
       const reader = streamResponse.body.getReader();
       const decoder = new TextDecoder("utf-8");
+      // SSE events may be split across network chunks. Keep the unfinished line
+      // until the next chunk arrives instead of silently dropping partial JSON.
+      let sseBuffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
+        sseBuffer += chunk;
+        const lines = sseBuffer.split("\n");
+        sseBuffer = lines.pop() || "";
 
         for (const line of lines) {
           if (line.startsWith("data: ")) {
