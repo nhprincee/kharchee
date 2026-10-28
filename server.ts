@@ -789,6 +789,13 @@ async function startServer() {
       const credentials = getRazorpayConfig();
       const planConfig = getPlanConfig(plan);
       const { db } = getBillingServices();
+      const currentBilling = await db.collection("users").doc(uid).collection("billing").doc("current").get();
+      const existingBilling = currentBilling.data();
+      const existingEnd = Number(existingBilling?.currentPeriodEnd || 0);
+      if (existingBilling && ["authenticated", "active"].includes(String(existingBilling.status)) && (!existingEnd || existingEnd > Date.now())) {
+        res.status(409).json({ error: "Kharchee Pro is already active on this account." });
+        return;
+      }
       const subscription = await razorpayApi<RazorpaySubscription>("subscriptions", "POST", {
         plan_id: planConfig.planId, total_count: planConfig.totalCount, quantity: 1, customer_notify: 1,
         notes: { firebase_uid: uid, product: "kharchee_pro", plan_key: plan },
@@ -849,6 +856,47 @@ async function startServer() {
     }
   });
 
+  app.post("/api/billing/cancel", async (req: Request, res: Response) => {
+    try {
+      const uid = await verifyBillingUser(req);
+      const { db } = getBillingServices();
+      const currentRef = db.collection("users").doc(uid).collection("billing").doc("current");
+      const current = await currentRef.get();
+      const currentData = current.data();
+      const subscriptionId = String(currentData?.subscriptionId || "");
+      if (!subscriptionId) {
+        res.status(404).json({ error: "No Pro subscription was found for this account." });
+        return;
+      }
+      const subscriptionRef = db.collection("billingSubscriptions").doc(subscriptionId);
+      const stored = await subscriptionRef.get();
+      if (!stored.exists || stored.data()?.uid !== uid) {
+        res.status(403).json({ error: "This subscription does not belong to the signed-in account." });
+        return;
+      }
+      const remote = await razorpayApi<RazorpaySubscription>("subscriptions/" + encodeURIComponent(subscriptionId) + "/cancel", "POST", { cancel_at_cycle_end: true });
+      const periodEnd = remote.current_end ? remote.current_end * 1000 : Number(currentData?.currentPeriodEnd || 0);
+      const state = {
+        uid, subscriptionId, planKey: currentData?.planKey || stored.data()?.planKey || null,
+        status: remote.status || "cancelled", currentPeriodEnd: periodEnd || null,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      await Promise.all([
+        subscriptionRef.set(state, { merge: true }),
+        currentRef.set(state, { merge: true }),
+      ]);
+      res.status(200).json({
+        cancelled: true,
+        active: periodEnd > Date.now(),
+        currentPeriodEnd: periodEnd || null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not cancel subscription.";
+      const status = message.includes("Sign in") ? 401 : message.includes("not configured") ? 503 : 400;
+      res.status(status).json({ error: status === 503 ? "Subscription management is not configured yet." : message });
+    }
+  });
+
   app.get("/api/billing/status", async (req: Request, res: Response) => {
     try {
       const uid = await verifyBillingUser(req);
@@ -857,7 +905,7 @@ async function startServer() {
       const record = snapshot.data();
       if (!record) { res.status(200).json({ active: false, plan: null }); return; }
       const periodEnd = Number(record.currentPeriodEnd || 0);
-      const active = ["authenticated", "active"].includes(String(record.status)) && (!periodEnd || periodEnd > Date.now());
+      const active = (["authenticated", "active"].includes(String(record.status)) || (String(record.status) === "cancelled" && periodEnd > Date.now())) && (!periodEnd || periodEnd > Date.now());
       res.status(200).json({ active, plan: active ? record.planKey || null : null, currentPeriodEnd: periodEnd || null, status: record.status || "inactive" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not read subscription status.";
