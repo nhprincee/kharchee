@@ -847,7 +847,7 @@ export function App() {
 
   const handleTourComplete = () => {
     setIsTourActive(false);
-    // Prompt CRED PRO Trial Teaser right after tour completion
+    // Offer Pro subscription plans after onboarding
     setIsProTeaserOpen(true);
   };
 
@@ -1259,8 +1259,6 @@ export function App() {
       dailyLimit,
       myUpiId,
       themeId,
-      isProActive,
-      proUtr: localStorage.getItem(scopedStorageKey("kharche_pro_utr_v1")) || "",
       lockdownActive,
       autoLockdownAt90,
       unlockedBadgeIds,
@@ -1348,11 +1346,6 @@ export function App() {
         if (typeof parsed.myUpiId === "string" && parsed.myUpiId.includes("@")) {
           setMyUpiId(parsed.myUpiId.trim());
           localStorage.setItem(scopedStorageKey("kharche_my_upi_id_v1"), parsed.myUpiId.trim());
-        }
-        const cleanedBackupUtr =
-          typeof parsed.proUtr === "string" ? parsed.proUtr.trim() : "";
-        if (/^\d{12}$/.test(cleanedBackupUtr)) {
-          localStorage.setItem(scopedStorageKey("kharche_pro_submitted_utr_v1"), cleanedBackupUtr);
         }
         // Premium access is server-authoritative; backup files cannot unlock paid Pro.
         if (Array.isArray(parsed.unlockedBadgeIds)) {
@@ -2273,7 +2266,7 @@ export function App() {
           onSkip={handleTourSkip}
         />
 
-        {/* PRO Upgrade Encouragement / 3-Day Free Trial Modal */}
+        {/* Pro subscription offer */}
         <ProTrialModal
           isOpen={isProTeaserOpen}
           theme={theme}
