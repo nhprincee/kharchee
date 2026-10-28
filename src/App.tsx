@@ -1025,7 +1025,7 @@ export function App() {
     const newFriend: KhataFriend = {
       id: `fr-${Date.now()}`,
       name,
-      phone: phone.replace(/\D/g, "") || "919800000000",
+      phone: phone.replace(/\D/g, "") || "",
       avatarInitials: initials || "FR",
       upiId: upiId || undefined,
       entries: [
@@ -2052,7 +2052,7 @@ export function App() {
             } else {
               handleAddFriendAndEntry(
                 friendName.trim(),
-                "919800000000",
+                "",
                 description,
                 amount
               );
