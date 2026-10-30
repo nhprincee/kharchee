@@ -39,6 +39,7 @@ interface ProfileDrawerProps {
   onShowToast: (message: string) => void;
   onReplayTour?: () => void;
   onOpenRewardVault?: () => void;
+  onOpenUpiGuard?: () => void;
   onExportBackup?: () => void;
   onImportBackup?: (file: File) => void;
 }
@@ -50,7 +51,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   todaySpent,
   streakDays,
   isProActive,
-  myUpiId = "mrigander@upi",
+  myUpiId = "",
   pinnedBadgeIds = ["iron-discipline", "zero-leak-legend"],
   onClose,
   onUpdateDailyLimit,
@@ -60,6 +61,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   onShowToast,
   onReplayTour,
   onOpenRewardVault,
+  onOpenUpiGuard,
   onExportBackup,
   onImportBackup,
 }) => {
@@ -88,12 +90,6 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
   // Receiving UPI ID State
   const [upiInput, setUpiInput] = useState(myUpiId);
   const [upiError, setUpiError] = useState("");
-
-  // PRO Tier UTR / Transaction Reference Verification State
-  const [proUtrInput, setProUtrInput] = useState(() => {
-    return localStorage.getItem("kharche_pro_submitted_utr_v1") || localStorage.getItem("kharche_pro_utr_v1") || "";
-  });
-  const [proUtrError, setProUtrError] = useState("");
 
   useEffect(() => {
     setUpiInput(myUpiId);
@@ -163,16 +159,16 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
     }
   };
 
-  // Google Auth Handlers
+  // Offline Local Profile (Demo) Auth Handlers
   const handleGoogleLogin = () => {
     setIsLoggedInWithGoogle(true);
-    onShowToast("Signed in as Mrigander Singh with Google");
+    onShowToast("Activated Offline Local Profile (Demo · Stored locally in browser)");
   };
 
   const handleLogout = () => {
     setIsLoggedInWithGoogle(false);
     setShowLogoutConfirm(false);
-    onShowToast("Logged out of Google account");
+    onShowToast("Switched to Guest Local Mode");
   };
 
   // Quick Daily Limit Save
@@ -501,17 +497,21 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
           >
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Authentication &amp; Account
+                Offline Local Profile (Demo)
               </span>
               {isLoggedInWithGoogle ? (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Active Session
+                <span className="flex items-center gap-1 text-[10px] font-bold text-amber-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  Local Storage Only
                 </span>
               ) : (
-                <span className="text-[10px] font-bold text-slate-500">Guest Mode</span>
+                <span className="text-[10px] font-bold text-slate-500">Guest Local Mode</span>
               )}
             </div>
+
+            <p className="text-[11px] text-slate-400 leading-snug">
+              Your profile and ledger are saved in browser storage on this device. Cloud sync and live Google OAuth require backend configuration.
+            </p>
 
             {isLoggedInWithGoogle ? (
               <div className="space-y-2.5">
@@ -541,15 +541,15 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                     </div>
 
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-white truncate">Logged in via Google</p>
+                      <p className="text-xs font-bold text-white truncate">Offline Local Profile (Demo)</p>
                       <p className="text-[10px] text-slate-400 font-mono truncate">
                         mrigandersinghrajput@gmail.com
                       </p>
                     </div>
                   </div>
 
-                  <span className="text-[10px] font-black uppercase text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full shrink-0">
-                    Synced
+                  <span className="text-[10px] font-black uppercase text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full shrink-0">
+                    Local Demo
                   </span>
                 </div>
 
@@ -561,18 +561,18 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                     className="w-full h-9 rounded-xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-950/40 text-rose-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <LogOut className="w-3.5 h-3.5" />
-                    <span>Log Out</span>
+                    <span>Switch to Guest Local Mode</span>
                   </button>
                 ) : (
                   <div className="p-2.5 rounded-xl border border-rose-500/40 bg-rose-950/30 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-rose-200">Confirm log out?</span>
+                    <span className="text-[11px] font-bold text-rose-200">Switch to Guest Mode?</span>
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={handleLogout}
                         className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] cursor-pointer"
                       >
-                        Yes, Log Out
+                        Yes, Switch
                       </button>
                       <button
                         type="button"
@@ -586,7 +586,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                 )}
               </div>
             ) : (
-              /* Google Sign In Button */
+              /* Offline Local Profile (Demo) Button */
               <button
                 type="button"
                 onClick={handleGoogleLogin}
@@ -610,7 +610,7 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
-                <span>Continue with Google</span>
+                <span>Quick-Fill Profile (Offline Local Demo)</span>
               </button>
             )}
           </section>
@@ -674,68 +674,21 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                 </div>
               </div>
 
-              {/* PRO Transaction Reference / UTR Number Verification */}
               {!isProActive ? (
-                <div className="pt-2 border-t border-white/10 space-y-2">
-                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-200 space-y-1">
-                    <p className="font-bold text-amber-300">Payment Verification Limitation</p>
-                    <p className="text-[10px] text-amber-100/80 leading-snug">
-                      A 12-digit UTR format check is not payment verification. Without an integrated payment gateway/webhook to confirm bank receipts, paid Pro status remains unverified.
-                    </p>
-                  </div>
-                  <label
-                    htmlFor="profile-pro-utr-input"
-                    className="block text-[10px] font-mono font-bold uppercase tracking-wider text-amber-300"
-                  >
-                    Enter Transaction Reference / UTR Number
-                  </label>
-                  <input
-                    id="profile-pro-utr-input"
-                    type="text"
-                    value={proUtrInput}
-                    onChange={(e) => {
-                      setProUtrInput(e.target.value);
-                      setProUtrError("");
-                    }}
-                    placeholder="e.g. 430189234512 (12-digit UPI UTR)"
-                    className="w-full h-9 px-3 rounded-xl bg-slate-950 border border-amber-400/40 text-xs font-mono font-bold text-amber-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                  />
-                  {proUtrError && (
-                    <p className="text-[10px] text-rose-400 font-medium">{proUtrError}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const cleanUtr = proUtrInput.trim();
-                      if (!/^\d{12}$/.test(cleanUtr)) {
-                        setProUtrError(
-                          "Please enter a valid 12-digit numeric UPI UTR / Reference Number (e.g. 430189234512)."
-                        );
-                        return;
-                      }
-                      localStorage.setItem("kharche_pro_submitted_utr_v1", cleanUtr);
-                      setProUtrError("");
-                      onShowToast(`Reference #${cleanUtr} recorded (Payment Unverified · No live gateway connected)`);
-                    }}
-                    className="w-full min-h-[38px] rounded-xl text-xs font-bold bg-slate-800 border border-amber-400/40 text-amber-300 hover:bg-slate-700 cursor-pointer active:scale-95 transition-all"
-                  >
-                    Submit Reference (Unverified)
+                <div className="pt-3 border-t border-white/10 space-y-2">
+                  <p className="text-[10px] leading-5 text-slate-400">Pro access is enabled only after secure checkout is verified by the server. A UPI reference number cannot unlock the subscription.</p>
+                  <button type="button" onClick={onTogglePro} className="w-full min-h-[40px] rounded-xl border border-slate-300/30 bg-gradient-to-r from-slate-100 to-slate-300 text-xs font-black text-slate-950 hover:brightness-105 cursor-pointer">
+                    View Pro subscription plans
                   </button>
-                  <p className="text-[10px] text-slate-400 text-center">
-                    To test Pro features, claim the official 3-Day Free Trial.
-                  </p>
                 </div>
               ) : (
-                <div className="pt-2 border-t border-white/10 space-y-2">
-                  <div className="flex items-center justify-between text-[10px] font-mono text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl">
-                    <span>PRO Status:</span>
-                    <span className="font-bold">
-                      {localStorage.getItem("kharche_pro_trial_v1") === "claimed" ? "3-Day Free Trial Active" : "Active"}
-                    </span>
+                <div className="pt-3 border-t border-white/10 space-y-2">
+                  <div className="flex items-center justify-between rounded-xl border border-emerald-500/25 bg-emerald-950/20 px-3 py-2 text-[10px] font-mono text-emerald-200">
+                    <span>Pro Status</span><span className="font-bold">Server verified</span>
                   </div>
-                  <div className="text-[10px] text-slate-400">
-                    Pro tier features unlocked for this session.
-                  </div>
+                  <button type="button" onClick={onTogglePro} className="w-full min-h-[38px] rounded-xl border border-slate-300/20 bg-white/[.04] text-xs font-bold text-slate-200 hover:bg-white/[.08] cursor-pointer">
+                    Manage subscription
+                  </button>
                 </div>
               )}
             </div>
@@ -893,6 +846,23 @@ export const ProfileDrawer: React.FC<ProfileDrawerProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* UPI Spending Accountability & Android Notification Guard */}
+            {onOpenUpiGuard && (
+              <div className="pt-2 border-t border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenUpiGuard();
+                  }}
+                  className="w-full h-10 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-400/40 text-xs font-bold text-indigo-200 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
+                >
+                  <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>UPI Spending Alert &amp; Android Notification Access</span>
+                </button>
+              </div>
+            )}
 
             {/* Tour & Onboarding Replay */}
             {onReplayTour && (

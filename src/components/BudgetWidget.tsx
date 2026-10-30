@@ -17,8 +17,22 @@ import {
   Users,
   BarChart3,
   PieChart as PieChartIcon,
+  Calendar,
+  AlertTriangle,
+  Target,
+  Trash2,
 } from "lucide-react";
-import type { Expense, ExpenseCategory, FanTheme, QuickAddPreset, TabId } from "../types";
+import {
+  EXPENSE_ONLY_CATEGORIES,
+  INCOME_ONLY_CATEGORIES,
+  type CategoryBudgets,
+  type Expense,
+  type ExpenseCategory,
+  type FanTheme,
+  type QuickAddPreset,
+  type SavingsGoal,
+  type TabId,
+} from "../types";
 import { QUICK_ADD_PRESETS } from "../data/initialData";
 import { getCategoryIcon } from "./SwipeableExpenseRow";
 import {
@@ -35,7 +49,13 @@ interface BudgetWidgetProps {
   expenses?: Expense[];
   streakDays?: number;
   stealthMode?: boolean;
+  categoryBudgets?: CategoryBudgets;
+  savingsGoals?: SavingsGoal[];
   onUpdateLimit: (newLimit: number) => void;
+  onUpdateCategoryBudget?: (category: ExpenseCategory, limit: number) => void;
+  onAddSavingsGoal?: (goal: { title: string; targetAmount: number; savedAmount: number; deadline?: string }) => void;
+  onUpdateSavingsGoal?: (goalId: string, savedAmount: number) => void;
+  onDeleteSavingsGoal?: (goalId: string) => void;
   onToggleLockdown: () => void;
   onOpenAddModal: () => void;
   onOpenAddIncomeModal?: () => void;
@@ -59,6 +79,10 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   Cashback: "#2dd4bf",
 };
 
+function isIncomeTx(e: Expense): boolean {
+  return e.type === "income" || INCOME_ONLY_CATEGORIES.includes(e.category);
+}
+
 function getNextMorningCooldown(): string {
   const now = new Date();
   const nextMorning = new Date(now);
@@ -81,7 +105,13 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
   lockdownActive,
   expenses = [],
   stealthMode = false,
+  categoryBudgets = {},
+  savingsGoals = [],
   onUpdateLimit,
+  onUpdateCategoryBudget,
+  onAddSavingsGoal,
+  onUpdateSavingsGoal,
+  onDeleteSavingsGoal,
   onToggleLockdown,
   onOpenAddModal,
   onOpenAddIncomeModal,
@@ -95,6 +125,27 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
   const [cooldownStr, setCooldownStr] = useState<string>(() => getNextMorningCooldown());
 
   const nowDate = new Date();
+  const currentMonthIdx = nowDate.getMonth();
+  const currentYearNum = nowDate.getFullYear();
+
+  // Dashboard Period Filter State ("month" | "year" | "all")
+  const [periodFilter, setPeriodFilter] = useState<"month" | "year" | "all">("month");
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentMonthIdx);
+  const [selectedYear, setSelectedYear] = useState<number>(currentYearNum);
+
+  // Category Budget Editor State
+  const [editingCat, setEditingCat] = useState<ExpenseCategory | null>(null);
+  const [catLimitInput, setCatLimitInput] = useState<string>("");
+
+  // Savings Goal Form State
+  const [isAddingGoal, setIsAddingGoal] = useState(false);
+  const [goalTitle, setGoalTitle] = useState("");
+  const [goalTarget, setGoalTarget] = useState("");
+  const [goalSaved, setGoalSaved] = useState("");
+  const [goalError, setGoalError] = useState("");
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [editGoalSavedInput, setEditGoalSavedInput] = useState<string>("");
+
   const realDayOfMonth = nowDate.getDate();
   const totalDaysInMonth = new Date(
     nowDate.getFullYear(),
@@ -128,52 +179,101 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
     return () => clearInterval(interval);
   }, [lockdownActive]);
 
-  // Financial Metrics derived strictly from real user records
-  const financialTotals = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+  // Available years from transaction records + current year
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<number>([currentYearNum, currentYearNum - 1]);
+    for (const e of expenses) {
+      const y = new Date(e.timestamp).getFullYear();
+      if (!Number.isNaN(y) && y >= 2000 && y <= 2100) {
+        yearsSet.add(y);
+      }
+    }
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [expenses, currentYearNum]);
 
-    const allIncome = expenses.filter((e) => e.type === "income");
-    const allExpenses = expenses.filter((e) => e.type !== "income");
+  // Filtered transactions matching the selected Dashboard period ("month" | "year" | "all")
+  const periodFilteredRecords = useMemo(() => {
+    return expenses.filter((e) => {
+      const d = new Date(e.timestamp);
+      if (Number.isNaN(d.getTime())) return false;
+      if (periodFilter === "month") {
+        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+      }
+      if (periodFilter === "year") {
+        return d.getFullYear() === selectedYear;
+      }
+      return true;
+    });
+  }, [expenses, periodFilter, selectedMonth, selectedYear]);
+
+  // Financial Metrics derived strictly from real user records (Income and Expenses strictly separated)
+  const financialTotals = useMemo(() => {
+    const allIncome = expenses.filter((e) => isIncomeTx(e));
+    const allExpenses = expenses.filter((e) => !isIncomeTx(e));
 
     const totalIncomeAllTime = allIncome.reduce((sum, e) => sum + e.amount, 0);
     const totalExpensesAllTime = allExpenses.reduce((sum, e) => sum + e.amount, 0);
     const netBalanceAllTime = totalIncomeAllTime - totalExpensesAllTime;
 
-    const thisMonthIncome = allIncome.filter((e) => {
+    const periodIncomeItems = periodFilteredRecords.filter((e) => isIncomeTx(e));
+    const periodExpenseItems = periodFilteredRecords.filter((e) => !isIncomeTx(e));
+
+    const periodIncome = periodIncomeItems.reduce((sum, e) => sum + e.amount, 0);
+    const periodExpenses = periodExpenseItems.reduce((sum, e) => sum + e.amount, 0);
+    const periodNetBalance = periodIncome - periodExpenses;
+
+    // Active Month Expenses (for Remaining Monthly Budget calculation)
+    const activeMonthTarget = periodFilter === "month" ? selectedMonth : currentMonthIdx;
+    const activeYearTarget = periodFilter === "all" ? currentYearNum : selectedYear;
+
+    const activeMonthExpenseItems = allExpenses.filter((e) => {
       const d = new Date(e.timestamp);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      return d.getMonth() === activeMonthTarget && d.getFullYear() === activeYearTarget;
     });
-    const thisMonthExpenses = allExpenses.filter((e) => {
+    const activeMonthIncomeItems = allIncome.filter((e) => {
       const d = new Date(e.timestamp);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      return d.getMonth() === activeMonthTarget && d.getFullYear() === activeYearTarget;
     });
 
-    const monthIncome = thisMonthIncome.reduce((sum, e) => sum + e.amount, 0);
-    const monthExpenses = thisMonthExpenses.reduce((sum, e) => sum + e.amount, 0);
-    const monthNetBalance = monthIncome - monthExpenses;
+    const monthExpenses = activeMonthExpenseItems.reduce((sum, e) => sum + e.amount, 0);
+    const monthIncome = activeMonthIncomeItems.reduce((sum, e) => sum + e.amount, 0);
 
-    const monthlyBudget = dailyLimit * 30;
+    // Monthly budget is dailyLimit * daysInMonth (or 30)
+    const daysInSelectedMonth = new Date(activeYearTarget, activeMonthTarget + 1, 0).getDate() || 30;
+    const monthlyBudget = dailyLimit * daysInSelectedMonth;
     const remainingMonthlyBudget = monthlyBudget - monthExpenses;
+    const monthlyBudgetUsedPercent =
+      monthlyBudget > 0 ? Math.round((monthExpenses / monthlyBudget) * 100) : 0;
 
     return {
       totalIncomeAllTime,
       totalExpensesAllTime,
       netBalanceAllTime,
+      periodIncome,
+      periodExpenses,
+      periodNetBalance,
+      periodIncomeCount: periodIncomeItems.length,
+      periodExpenseCount: periodExpenseItems.length,
       monthIncome,
       monthExpenses,
-      monthNetBalance,
       monthlyBudget,
       remainingMonthlyBudget,
-      incomeCount: thisMonthIncome.length,
-      expenseCount: thisMonthExpenses.length,
+      monthlyBudgetUsedPercent,
       allTimeIncomeCount: allIncome.length,
       allTimeExpenseCount: allExpenses.length,
     };
-  }, [expenses, dailyLimit]);
+  }, [
+    expenses,
+    periodFilteredRecords,
+    periodFilter,
+    selectedMonth,
+    selectedYear,
+    currentMonthIdx,
+    currentYearNum,
+    dailyLimit,
+  ]);
 
-  // Monthly Income vs Expense Chart Data (Last 4 Weekly Buckets in Current Month + Summary)
+  // Monthly Income vs Expense Chart Data (Last 4 Weekly Buckets + Summary)
   const cashflowChartData = useMemo(() => {
     const buckets: Array<{
       label: string;
@@ -197,7 +297,7 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
       for (const item of expenses) {
         const ts = new Date(item.timestamp).getTime();
         if (ts >= start.getTime() && ts <= end.getTime()) {
-          if (item.type === "income") inc += item.amount;
+          if (isIncomeTx(item)) inc += item.amount;
           else exp += item.amount;
         }
       }
@@ -229,9 +329,9 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
     [cashflowChartData]
   );
 
-  // Category-Wise Spending Breakdown
+  // Category-Wise Spending Breakdown (Strictly Expenses Only for selected period)
   const categoryBreakdown = useMemo(() => {
-    const expenseItems = expenses.filter((e) => e.type !== "income");
+    const expenseItems = periodFilteredRecords.filter((e) => !isIncomeTx(e));
     const totalOutflow = expenseItems.reduce((s, e) => s + e.amount, 0);
     const map = new Map<ExpenseCategory, { amount: number; count: number }>();
 
@@ -249,7 +349,55 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
         color: CATEGORY_COLORS[category] || "#6366f1",
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [expenses]);
+  }, [periodFilteredRecords]);
+
+  // Active Month Category Spend Map (Expenses Only) for Category Monthly Budgets
+  const activeMonthCategorySpend = useMemo(() => {
+    const activeMonthTarget = periodFilter === "month" ? selectedMonth : currentMonthIdx;
+    const activeYearTarget = periodFilter === "all" ? currentYearNum : selectedYear;
+    const map: Record<string, number> = {};
+
+    for (const e of expenses) {
+      if (isIncomeTx(e)) continue;
+      const d = new Date(e.timestamp);
+      if (d.getMonth() === activeMonthTarget && d.getFullYear() === activeYearTarget) {
+        map[e.category] = (map[e.category] || 0) + e.amount;
+      }
+    }
+    return map;
+  }, [expenses, periodFilter, selectedMonth, selectedYear, currentMonthIdx, currentYearNum]);
+
+  const categoryBudgetStatuses = useMemo(() => {
+    return EXPENSE_ONLY_CATEGORIES.map((cat) => {
+      const spent = activeMonthCategorySpend[cat] || 0;
+      const limit = categoryBudgets[cat] || 0;
+      const percent = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+      const status: "unconfigured" | "safe" | "warning" | "exceeded" =
+        limit <= 0
+          ? "unconfigured"
+          : spent >= limit
+          ? "exceeded"
+          : percent >= 80
+          ? "warning"
+          : "safe";
+      return {
+        category: cat,
+        spent,
+        limit,
+        percent,
+        status,
+        color: CATEGORY_COLORS[cat] || "#6366f1",
+      };
+    });
+  }, [activeMonthCategorySpend, categoryBudgets]);
+
+  const activeCategoryAlerts = useMemo(
+    () =>
+      categoryBudgetStatuses.filter(
+        (c) => c.status === "exceeded" || c.status === "warning"
+      ),
+    [categoryBudgetStatuses]
+  );
 
   const remaining = dailyLimit - todaySpent;
   const rawPercent = dailyLimit > 0 ? Math.round((todaySpent / dailyLimit) * 100) : 0;
@@ -258,7 +406,18 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
   const isSafeBurnBreached = isOverBudget || rawPercent >= 100;
   const isShieldActive = dailyLimit > 0 && todaySpent <= dailyLimit * 0.5;
 
-  const monthName = nowDate.toLocaleString("en-IN", { month: "short", year: "numeric" });
+  const monthName = new Date(
+    periodFilter === "all" ? currentYearNum : selectedYear,
+    periodFilter === "month" ? selectedMonth : currentMonthIdx,
+    1
+  ).toLocaleString("en-IN", { month: "short", year: "numeric" });
+
+  const periodLabel =
+    periodFilter === "month"
+      ? monthName
+      : periodFilter === "year"
+      ? `Year ${selectedYear}`
+      : "All-Time";
 
   const handleSaveLimit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,15 +428,144 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
     }
   };
 
+  const handleSaveCategoryLimit = (cat: ExpenseCategory) => {
+    const parsed = Number(catLimitInput);
+    if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 10000000) {
+      onUpdateCategoryBudget?.(cat, Math.round(parsed));
+      setEditingCat(null);
+      setCatLimitInput("");
+    }
+  };
+
+  const handleCreateGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetNum = Number(goalTarget);
+    const savedNum = goalSaved.trim() ? Number(goalSaved) : 0;
+    if (!goalTitle.trim()) {
+      setGoalError("Enter a savings goal name (e.g. Emergency Fund, New Laptop).");
+      return;
+    }
+    if (Number.isNaN(targetNum) || targetNum <= 0 || targetNum > 100000000) {
+      setGoalError("Enter a valid target amount greater than ₹0.");
+      return;
+    }
+    if (Number.isNaN(savedNum) || savedNum < 0 || savedNum > targetNum * 10) {
+      setGoalError("Enter a valid current saved amount.");
+      return;
+    }
+    onAddSavingsGoal?.({
+      title: goalTitle.trim(),
+      targetAmount: Math.round(targetNum),
+      savedAmount: Math.round(savedNum),
+    });
+    setGoalTitle("");
+    setGoalTarget("");
+    setGoalSaved("");
+    setGoalError("");
+    setIsAddingGoal(false);
+  };
+
+  const MONTH_NAMES = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
   return (
     <div className="space-y-6">
-      {/* 1. FINANCIAL SUMMARY CARDS (4-Card SaaS KPI Grid) */}
+      {/* 0. DASHBOARD PERIOD FILTER BAR (Monthly / Yearly / All-Time) */}
+      <section
+        aria-label="Dashboard Time Period Filter"
+        className="p-3 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+      >
+        <div className="flex items-center gap-2">
+          <span className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+            <Calendar className="w-3.5 h-3.5" />
+          </span>
+          <div>
+            <span className="text-xs font-bold text-slate-100 block">
+              Financial Overview · {periodLabel}
+            </span>
+            <span className="text-[11px] text-slate-400">
+              Income and expenses are tracked separately across all metrics
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-between sm:justify-end">
+          {/* Segmented Period Selector */}
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800">
+            {(
+              [
+                { id: "month", label: "Monthly" },
+                { id: "year", label: "Yearly" },
+                { id: "all", label: "All-Time" },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setPeriodFilter(tab.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                  periodFilter === tab.id
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Month & Year Selectors */}
+          {periodFilter === "month" && (
+            <select
+              aria-label="Select Month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="h-8 px-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              {MONTH_NAMES.map((m, idx) => (
+                <option key={m} value={idx}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {(periodFilter === "month" || periodFilter === "year") && (
+            <select
+              aria-label="Select Year"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="h-8 px-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono font-semibold text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              {availableYears.map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </section>
+
+      {/* 1. FINANCIAL SUMMARY CARDS (Total Balance, Total Income, Total Expenses, Remaining Monthly Budget) */}
       <section aria-label="Financial Summary Cards" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Card 1: All-Time Net Balance */}
+        {/* Card 1: Total Balance (Available Balance = Income − Expenses) */}
         <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              All-Time Balance
+              Total Balance ({periodFilter === "all" ? "All-Time" : periodLabel})
             </span>
             <span className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center text-indigo-400">
               <Wallet className="w-3.5 h-3.5" />
@@ -287,32 +575,33 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
             <p className="font-mono tabular-nums text-xl sm:text-2xl font-extrabold text-white tracking-tight">
               {stealthMode
                 ? "₹0"
-                : `${financialTotals.netBalanceAllTime >= 0 ? "+" : "−"}₹${Math.abs(
-                    financialTotals.netBalanceAllTime
+                : `${financialTotals.periodNetBalance >= 0 ? "+" : "−"}₹${Math.abs(
+                    financialTotals.periodNetBalance
                   ).toLocaleString("en-IN")}`}
             </p>
             <div className="flex items-center gap-1.5 mt-1">
               <span
                 className={`inline-flex items-center gap-0.5 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
-                  financialTotals.netBalanceAllTime >= 0
+                  financialTotals.periodNetBalance >= 0
                     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
                     : "bg-rose-500/10 border-rose-500/30 text-rose-300"
                 }`}
               >
-                {financialTotals.netBalanceAllTime >= 0 ? "Surplus" : "Deficit"}
+                {financialTotals.periodNetBalance >= 0 ? "Surplus" : "Deficit"}
               </span>
               <span className="text-[11px] text-slate-400 truncate">
-                Month: {financialTotals.monthNetBalance >= 0 ? "+" : "−"}₹{Math.abs(financialTotals.monthNetBalance).toLocaleString("en-IN")}
+                All-time: {financialTotals.netBalanceAllTime >= 0 ? "+" : "−"}₹
+                {Math.abs(financialTotals.netBalanceAllTime).toLocaleString("en-IN")}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Card 2: This Month Inflow */}
+        {/* Card 2: Total Income */}
         <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              This Month Inflow
+              Total Income ({periodFilter === "all" ? "All-Time" : periodLabel})
             </span>
             <span className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
               <ArrowDownLeft className="w-3.5 h-3.5" />
@@ -320,11 +609,11 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
           </div>
           <div className="mt-3">
             <p className="font-mono tabular-nums text-xl sm:text-2xl font-extrabold text-emerald-400 tracking-tight">
-              {stealthMode ? "₹0" : `+₹${financialTotals.monthIncome.toLocaleString("en-IN")}`}
+              {stealthMode ? "₹0" : `+₹${financialTotals.periodIncome.toLocaleString("en-IN")}`}
             </p>
             <div className="flex items-center justify-between gap-1 mt-1">
               <span className="text-[11px] text-slate-400 font-mono tabular-nums">
-                {financialTotals.incomeCount} inflows
+                {financialTotals.periodIncomeCount} inflows
               </span>
               <span className="text-[10px] font-mono text-slate-500">
                 All-time: +₹{financialTotals.totalIncomeAllTime.toLocaleString("en-IN")}
@@ -333,11 +622,11 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
           </div>
         </div>
 
-        {/* Card 3: This Month Outflow */}
+        {/* Card 3: Total Expenses (Strictly Excludes Income) */}
         <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              This Month Outflow
+              Total Expenses ({periodFilter === "all" ? "All-Time" : periodLabel})
             </span>
             <span className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400">
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -345,7 +634,7 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
           </div>
           <div className="mt-3">
             <p className="font-mono tabular-nums text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-              {stealthMode ? "₹0" : `−₹${financialTotals.monthExpenses.toLocaleString("en-IN")}`}
+              {stealthMode ? "₹0" : `−₹${financialTotals.periodExpenses.toLocaleString("en-IN")}`}
             </p>
             <div className="flex items-center justify-between gap-1 mt-1">
               <span className="text-[11px] text-slate-400 font-mono tabular-nums truncate">
@@ -358,14 +647,14 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
           </div>
         </div>
 
-        {/* Card 4: Daily Budget Left */}
+        {/* Card 4: Remaining Monthly Budget */}
         <div
           id="tour-budget-ring"
           className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between"
         >
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Daily Budget Left
+              Remaining Monthly Budget
             </span>
             <span className="w-7 h-7 rounded-lg bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-violet-400">
               <PiggyBank className="w-3.5 h-3.5" />
@@ -374,16 +663,22 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
           <div className="mt-3">
             <p
               className={`font-mono tabular-nums text-xl sm:text-2xl font-extrabold tracking-tight ${
-                isOverBudget ? "text-rose-400" : "text-white"
+                financialTotals.remainingMonthlyBudget < 0 ? "text-rose-400" : "text-white"
               }`}
             >
               {stealthMode
                 ? "₹0"
-                : `${isOverBudget ? "−" : ""}₹${Math.abs(remaining).toLocaleString("en-IN")}`}
+                : `${financialTotals.remainingMonthlyBudget < 0 ? "−" : ""}₹${Math.abs(
+                    financialTotals.remainingMonthlyBudget
+                  ).toLocaleString("en-IN")}`}
             </p>
             <div className="flex items-center justify-between gap-1 mt-1">
-              <span className="text-[11px] text-slate-400 font-mono tabular-nums">
-                {stealthMode ? "Stealth" : `${rawPercent}% of ₹${dailyLimit}`}
+              <span className="text-[11px] text-slate-400 font-mono tabular-nums truncate">
+                {stealthMode
+                  ? "Stealth"
+                  : `${financialTotals.monthlyBudgetUsedPercent}% of ₹${financialTotals.monthlyBudget.toLocaleString(
+                      "en-IN"
+                    )}/mo`}
               </span>
               {!isEditingLimit ? (
                 <button
@@ -392,8 +687,8 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
                     setLimitInput(String(dailyLimit));
                     setIsEditingLimit(true);
                   }}
-                  className="text-[10px] font-semibold text-indigo-300 hover:text-indigo-200 flex items-center gap-0.5 cursor-pointer"
-                  title="Edit daily budget limit"
+                  className="text-[10px] font-semibold text-indigo-300 hover:text-indigo-200 flex items-center gap-0.5 cursor-pointer shrink-0"
+                  title="Edit daily & monthly budget limit"
                 >
                   <Pencil className="w-2.5 h-2.5" />
                   <span>Edit</span>
@@ -853,6 +1148,372 @@ export const BudgetWidget: React.FC<BudgetWidgetProps> = ({
           )}
         </div>
       </section>
+
+      {/* 4. CATEGORY MONTHLY BUDGETS & SAVINGS GOALS (Requirement 4) */}
+      <section
+        aria-label="Category Monthly Budgets and Savings Goals"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+      >
+        {/* Left: Category Monthly Budgets */}
+        <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <PiggyBank className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                  Category Monthly Budgets ({monthName})
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Set monthly limits per expense category · Income is never counted as spending
+              </p>
+            </div>
+            {activeCategoryAlerts.length > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/40 text-[10px] font-mono font-bold text-rose-300">
+                <AlertTriangle className="w-3 h-3" />
+                <span>{activeCategoryAlerts.length} Alert{activeCategoryAlerts.length > 1 ? "s" : ""}</span>
+              </span>
+            )}
+          </div>
+
+          {activeCategoryAlerts.length > 0 && (
+            <div className="p-2.5 rounded-xl bg-amber-950/25 border border-amber-500/35 space-y-1">
+              {activeCategoryAlerts.map((alert) => (
+                <p key={alert.category} className="text-[11px] text-amber-200 flex items-center justify-between gap-2">
+                  <span>
+                    {alert.status === "exceeded" ? "🚨 Exceeded:" : "⚠️ Approaching limit:"}{" "}
+                    <strong className="text-white">{alert.category}</strong>
+                  </span>
+                  <span className="font-mono tabular-nums font-bold">
+                    ₹{alert.spent.toLocaleString("en-IN")} / ₹{alert.limit.toLocaleString("en-IN")} ({alert.percent}%)
+                  </span>
+                </p>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+            {categoryBudgetStatuses.map((item) => {
+              const Icon = getCategoryIcon(item.category);
+              const isEditingThis = editingCat === item.category;
+              const barColor =
+                item.status === "exceeded"
+                  ? "#f43f5e"
+                  : item.status === "warning"
+                  ? "#f59e0b"
+                  : item.color;
+
+              return (
+                <div
+                  key={item.category}
+                  className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 bg-slate-900 border border-slate-800"
+                        style={{ color: item.color }}
+                      >
+                        <Icon className="w-3 h-3" />
+                      </span>
+                      <span className="text-xs font-semibold text-slate-200 truncate">
+                        {item.category}
+                      </span>
+                      {item.status === "exceeded" && (
+                        <span className="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-[9px] font-mono font-bold text-rose-300 uppercase">
+                          Over Limit
+                        </span>
+                      )}
+                      {item.status === "warning" && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[9px] font-mono font-bold text-amber-300 uppercase">
+                          Near Limit ({item.percent}%)
+                        </span>
+                      )}
+                    </div>
+
+                    {isEditingThis ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-mono text-slate-400">₹</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={1000000}
+                          step={100}
+                          value={catLimitInput}
+                          onChange={(e) => setCatLimitInput(e.target.value)}
+                          placeholder="e.g. 3000"
+                          className="w-20 h-6 px-1.5 rounded bg-slate-900 border border-indigo-500/60 text-[11px] font-mono text-white focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveCategoryLimit(item.category)}
+                          className="px-2 h-6 rounded bg-indigo-600 text-white text-[10px] font-bold cursor-pointer"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCat(null)}
+                          className="px-1.5 h-6 rounded bg-slate-800 text-slate-300 text-[10px] cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono tabular-nums text-[11px] text-slate-300">
+                          {stealthMode
+                            ? "₹0"
+                            : item.limit > 0
+                            ? `₹${item.spent.toLocaleString("en-IN")} / ₹${item.limit.toLocaleString("en-IN")}`
+                            : `Spent ₹${item.spent.toLocaleString("en-IN")}`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCat(item.category);
+                            setCatLimitInput(item.limit > 0 ? String(item.limit) : "");
+                          }}
+                          className="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Pencil className="w-2.5 h-2.5" />
+                          <span>{item.limit > 0 ? "Edit" : "Set Limit"}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {item.limit > 0 && (
+                    <div className="h-1.5 w-full rounded-full bg-slate-900 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, Math.max(3, item.percent))}%`,
+                          backgroundColor: barColor,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right: Savings Goals */}
+        <div className="p-4 rounded-2xl bg-[#0c1220] border border-slate-800/90 flex flex-col justify-between space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <Target className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                  Savings Goals
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Track target amounts, saved reserves, and milestone progress
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAddingGoal((v) => !v);
+                setGoalError("");
+              }}
+              className="px-2.5 py-1 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{isAddingGoal ? "Close" : "New Goal"}</span>
+            </button>
+          </div>
+
+          {isAddingGoal && (
+            <form
+              onSubmit={handleCreateGoal}
+              className="p-3 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-2.5"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input
+                  type="text"
+                  placeholder="Goal title (e.g. Emergency Fund)"
+                  value={goalTitle}
+                  onChange={(e) => {
+                    setGoalTitle(e.target.value);
+                    setGoalError("");
+                  }}
+                  className="h-8 px-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-white focus:outline-none"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Target ₹ (e.g. 50000)"
+                  value={goalTarget}
+                  onChange={(e) => {
+                    setGoalTarget(e.target.value);
+                    setGoalError("");
+                  }}
+                  className="h-8 px-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono text-white focus:outline-none"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="Saved so far ₹ (0)"
+                  value={goalSaved}
+                  onChange={(e) => {
+                    setGoalSaved(e.target.value);
+                    setGoalError("");
+                  }}
+                  className="h-8 px-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono text-white focus:outline-none"
+                />
+              </div>
+              {goalError && <p className="text-[11px] text-rose-400">{goalError}</p>}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingGoal(false)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 text-[11px] font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold cursor-pointer"
+                >
+                  Create Goal
+                </button>
+              </div>
+            </form>
+          )}
+
+          {savingsGoals.length === 0 ? (
+            <div className="py-8 text-center space-y-2">
+              <p className="text-xs text-slate-400">
+                No savings goals added yet. Create a target to track your progress!
+              </p>
+              {!isAddingGoal && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingGoal(true)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-emerald-300 hover:text-emerald-200 cursor-pointer"
+                >
+                  + Add First Savings Goal
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+              {savingsGoals.map((goal) => {
+                const pct =
+                  goal.targetAmount > 0
+                    ? Math.min(100, Math.round((goal.savedAmount / goal.targetAmount) * 100))
+                    : 0;
+                const isEditingSaved = editingGoalId === goal.id;
+
+                return (
+                  <div
+                    key={goal.id}
+                    className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-100 truncate">
+                            {goal.title}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                              pct >= 100
+                                ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300"
+                                : "bg-indigo-500/15 border border-indigo-500/30 text-indigo-300"
+                            }`}
+                          >
+                            {pct}%
+                          </span>
+                        </div>
+                        <p className="font-mono tabular-nums text-[11px] text-slate-400 mt-0.5">
+                          {stealthMode
+                            ? "₹0 / ₹0"
+                            : `Saved ₹${goal.savedAmount.toLocaleString("en-IN")} of ₹${goal.targetAmount.toLocaleString("en-IN")}`}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateSavingsGoal?.(goal.id, goal.savedAmount + 500)
+                          }
+                          title="Add ₹500 to saved amount"
+                          className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-[10px] font-mono font-bold text-emerald-300 cursor-pointer"
+                        >
+                          +₹500
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingGoalId(isEditingSaved ? null : goal.id);
+                            setEditGoalSavedInput(String(goal.savedAmount));
+                          }}
+                          title="Edit saved amount"
+                          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white cursor-pointer"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteSavingsGoal?.(goal.id)}
+                          title="Delete savings goal"
+                          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {isEditingSaved && (
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <span className="text-[10px] font-mono text-slate-400">Saved ₹:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={editGoalSavedInput}
+                          onChange={(e) => setEditGoalSavedInput(e.target.value)}
+                          className="w-24 h-6 px-2 rounded bg-slate-900 border border-emerald-500/50 text-xs font-mono text-white focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextVal = Number(editGoalSavedInput);
+                            if (!Number.isNaN(nextVal) && nextVal >= 0) {
+                              onUpdateSavingsGoal?.(goal.id, Math.round(nextVal));
+                              setEditingGoalId(null);
+                            }
+                          }}
+                          className="px-2 h-6 rounded bg-emerald-600 text-white text-[10px] font-bold cursor-pointer"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="h-2 w-full rounded-full bg-slate-900 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.max(2, pct)}%`,
+                          backgroundColor: pct >= 100 ? "#10b981" : "#6366f1",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 };
+

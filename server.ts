@@ -1,10 +1,14 @@
 import express from "express";
 import type { Request, Response } from "express";
+import { createHmac, timingSafeEqual } from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { type FunctionDeclaration, GoogleGenAI, Type } from "@google/genai";
+import { applicationDefault, cert, getApps as getAdminApps, initializeApp as initializeAdminApp } from "firebase-admin/app";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 
 dotenv.config();
 
@@ -37,6 +41,17 @@ export interface FinancialSnapshot {
   streakDays: number;
   disciplineScore?: number;
   themeName: string;
+  monthIncome?: number;
+  monthExpenses?: number;
+  monthlyBudget?: number;
+  remainingMonthlyBudget?: number;
+  allTimeIncome?: number;
+  allTimeExpenses?: number;
+  netBalance?: number;
+  topCategories?: string[];
+  unusualExpenses?: string[];
+  categoryBudgetAlerts?: string[];
+  savingsGoalsSummary?: string[];
   recentExpenses: Array<{
     title: string;
     category: string;
@@ -464,10 +479,85 @@ function buildDynamicJarvisReply(
   const rem = snapshot?.remaining ?? limit - spent;
   const pct = snapshot?.percentUsed ?? Math.round((spent / limit) * 100);
   const score = snapshot?.disciplineScore ?? 750;
+  const monthIncome = snapshot?.monthIncome ?? 0;
+  const monthExpenses = snapshot?.monthExpenses ?? spent;
+  const monthlyBudget = snapshot?.monthlyBudget ?? limit * 30;
+  const remainingMonthlyBudget = snapshot?.remainingMonthlyBudget ?? monthlyBudget - monthExpenses;
+  const netBalance = snapshot?.netBalance ?? monthIncome - monthExpenses;
+  const topCategories = snapshot?.topCategories ?? [];
+  const unusualExpenses = snapshot?.unusualExpenses ?? [];
+  const categoryBudgetAlerts = snapshot?.categoryBudgetAlerts ?? [];
+  const savingsGoalsSummary = snapshot?.savingsGoalsSummary ?? [];
+
   const recentList =
     snapshot?.recentExpenses && snapshot.recentExpenses.length > 0
       ? snapshot.recentExpenses.map((e) => `${e.title} (₹${e.amount})`).join(", ")
       : "No expenses logged today yet";
+
+  if (
+    p.includes("month") ||
+    p.includes("summary") ||
+    p.includes("spent") ||
+    p.includes("spending") ||
+    p.includes("kitna kharch")
+  ) {
+    const topCatStr =
+      topCategories.length > 0 ? topCategories.join(", ") : "no expense categories recorded yet";
+    return `This month you have spent ₹${monthExpenses.toLocaleString("en-IN")} out of your ₹${monthlyBudget.toLocaleString(
+      "en-IN"
+    )} monthly budget (${
+      remainingMonthlyBudget >= 0
+        ? `₹${remainingMonthlyBudget.toLocaleString("en-IN")} remaining`
+        : `over budget by ₹${Math.abs(remainingMonthlyBudget).toLocaleString("en-IN")}`
+    }), while recording +₹${monthIncome.toLocaleString("en-IN")} in income. Top spending categories: ${topCatStr}.`;
+  }
+
+  if (
+    p.includes("unusual") ||
+    p.includes("alert") ||
+    p.includes("high") ||
+    p.includes("anomaly") ||
+    p.includes("bada kharcha")
+  ) {
+    if (unusualExpenses.length === 0 && categoryBudgetAlerts.length === 0) {
+      return `No unusual high-ticket expenses or category budget breaches detected this month, Sir. Today's spend is ₹${spent} out of ₹${limit} (${pct}%).`;
+    }
+    const parts: string[] = [];
+    if (unusualExpenses.length > 0) {
+      parts.push(`High outlays flagged: ${unusualExpenses.join(", ")}`);
+    }
+    if (categoryBudgetAlerts.length > 0) {
+      parts.push(`Category budget alerts: ${categoryBudgetAlerts.join("; ")}`);
+    }
+    return `Telemetry scan complete, Sir. ${parts.join(". ")}. Keep a close watch on these categories to protect your monthly runway.`;
+  }
+
+  if (
+    p.includes("save") ||
+    p.includes("saving") ||
+    p.includes("suggestion") ||
+    p.includes("tip") ||
+    p.includes("advice") ||
+    p.includes("bachat")
+  ) {
+    const topCat = topCategories[0] || "discretionary spending";
+    const goalText =
+      savingsGoalsSummary.length > 0
+        ? ` Active savings goals: ${savingsGoalsSummary.join(", ")}.`
+        : "";
+    return `Saving suggestion grounded in your ledger: Your largest expense category this month is ${topCat}. Trimming 15% there and keeping daily spend within ₹${limit} (today: ₹${spent}) will protect ₹${Math.max(
+      0,
+      remainingMonthlyBudget
+    ).toLocaleString("en-IN")} in remaining monthly budget.${goalText}`;
+  }
+
+  if (p.includes("balance") || p.includes("income") || p.includes("salary")) {
+    return `Your net available balance is ${
+      netBalance >= 0 ? "+" : "−"
+    }₹${Math.abs(netBalance).toLocaleString("en-IN")} (This month income: +₹${monthIncome.toLocaleString(
+      "en-IN"
+    )}, This month expenses: −₹${monthExpenses.toLocaleString("en-IN")}). Income is never counted as spending.`;
+  }
 
   if (p.includes("score")) {
     return `Your CRED-style Discipline Score stands at ${score}/900, Boss. ${
@@ -493,7 +583,9 @@ function buildDynamicJarvisReply(
     return `Perimeter alert, Boss: you have deployed ₹${spent} today (${pct}% of quota), leaving ₹${rem} in reserve. Recent logs show ${recentList}. Tread carefully into the evening.`;
   }
 
-  return `Systems nominal, Sir! You have deployed ₹${spent} today with a solid ₹${rem} intact in reserve (${pct}% used). Exemplary financial discipline worthy of Stark Industries. How may I assist your mission?`;
+  return `Systems nominal, Sir! You have deployed ₹${spent} today with ₹${rem} intact in daily reserve (${pct}% used), and ₹${remainingMonthlyBudget.toLocaleString(
+    "en-IN"
+  )} remaining in your monthly budget. How may I assist your mission?`;
 }
 
 const GEMINI_TEXT_MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
@@ -502,22 +594,37 @@ const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-previ
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
 const ipRequestTimestamps = new Map<string, number[]>();
+let lastRateLimitSweep = Date.now();
+
+function sweepExpiredRateLimitEntries(now: number) {
+  const windowStart = now - RATE_LIMIT_WINDOW_MS;
+  for (const [ip, timestamps] of ipRequestTimestamps.entries()) {
+    const active = timestamps.filter((ts) => ts > windowStart);
+    if (active.length === 0) {
+      ipRequestTimestamps.delete(ip);
+    } else if (active.length !== timestamps.length) {
+      ipRequestTimestamps.set(ip, active);
+    }
+  }
+  lastRateLimitSweep = now;
+}
 
 function apiRateLimiter(req: Request, res: Response, next: () => void) {
-  const forwarded = req.headers["x-forwarded-for"];
-  const clientIp =
-    (typeof forwarded === "string" ? forwarded.split(",")[0].trim() : "") ||
-    req.ip ||
-    req.socket?.remoteAddress ||
-    "unknown";
+  // Disallow relying blindly on raw X-Forwarded-For headers to prevent spoofed IP bypasses.
+  // Express populates req.ip safely based on configured trust proxy settings, falling back to socket address.
+  const clientIp = req.ip || req.socket?.remoteAddress || "unknown";
 
   const now = Date.now();
+  if (now - lastRateLimitSweep > RATE_LIMIT_WINDOW_MS || ipRequestTimestamps.size > 500) {
+    sweepExpiredRateLimitEntries(now);
+  }
+
   const windowStart = now - RATE_LIMIT_WINDOW_MS;
-  const recentTimestamps = (ipRequestTimestamps.get(clientIp) || []).filter(
-    (ts) => ts > windowStart
-  );
+  const existing = ipRequestTimestamps.get(clientIp);
+  const recentTimestamps = existing ? existing.filter((ts) => ts > windowStart) : [];
 
   if (recentTimestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    ipRequestTimestamps.set(clientIp, recentTimestamps);
     res.status(429).json({
       error: "Too many requests. Please wait a moment before trying again.",
     });
@@ -555,6 +662,27 @@ function buildGeminiPayload(
   const spent = snapshot?.todaySpent ?? 0;
   const diff = snapshot?.remaining ?? limit - spent;
   const percentage = snapshot?.percentUsed ?? Math.round((spent / limit) * 100);
+  const monthIncome = snapshot?.monthIncome ?? 0;
+  const monthExpenses = snapshot?.monthExpenses ?? spent;
+  const monthlyBudget = snapshot?.monthlyBudget ?? limit * 30;
+  const remainingMonthlyBudget = snapshot?.remainingMonthlyBudget ?? monthlyBudget - monthExpenses;
+  const netBalance = snapshot?.netBalance ?? monthIncome - monthExpenses;
+  const topCategoriesList =
+    snapshot?.topCategories && snapshot.topCategories.length > 0
+      ? snapshot.topCategories.join(", ")
+      : "None recorded this month";
+  const unusualList =
+    snapshot?.unusualExpenses && snapshot.unusualExpenses.length > 0
+      ? snapshot.unusualExpenses.join(", ")
+      : "No unusual high expenses flagged";
+  const catAlertsList =
+    snapshot?.categoryBudgetAlerts && snapshot.categoryBudgetAlerts.length > 0
+      ? snapshot.categoryBudgetAlerts.join("; ")
+      : "All category budgets within safe limits";
+  const savingsGoalsList =
+    snapshot?.savingsGoalsSummary && snapshot.savingsGoalsSummary.length > 0
+      ? snapshot.savingsGoalsSummary.join(", ")
+      : "No savings goals configured";
   const recentList =
     snapshot?.recentExpenses && snapshot.recentExpenses.length > 0
       ? snapshot.recentExpenses.map((e) => `${e.title} (₹${e.amount}, ${e.category})`).join(", ")
@@ -566,26 +694,25 @@ function buildGeminiPayload(
   const systemInstruction = `You are J.A.R.V.I.S., the ultimate hyper-intelligent AI butler and street-smart financial tactician (inspired by Tony Stark's personal assistant).
 - Persona: Sophisticated British gentleman meets witty Indian brother ('Sir', 'Bhai', 'Boss').
 - Language: Seamless natural spoken Hinglish.
-- Core Capability: You can talk about ANYTHING. Life, financial hacks, investment philosophies, daily discipline, workout motivation, or just friendly banter. You are NOT just a rigid calculator.
-- Live Telemetry Grounding:
-  * Today's Limit: ₹${limit}
-  * Spent: ₹${spent}
-  * Overspend/Remaining: ₹${diff} (${diff >= 0 ? "Remaining in reserve" : "OVER BUDGET by ₹" + Math.abs(diff)})
-  * Percentage: ${percentage}%
+- Core Capability: Provide accurate spending summaries, unusual expense alerts, saving suggestions, and answers to questions about monthly spending using ONLY the user's real transaction data below. NEVER fabricate transactions, financial figures, or insights.
+- Live Telemetry Grounding (Real User Data — Income and Expenses are strictly separate):
+  * Today's Limit: ₹${limit} | Today's Expenses: ₹${spent} (${percentage}% used, ${diff >= 0 ? "₹" + diff + " remaining today" : "OVER DAILY BUDGET by ₹" + Math.abs(diff)})
+  * This Month's Income: +₹${monthIncome} (Excluded from spending)
+  * This Month's Total Expenses: −₹${monthExpenses}
+  * Monthly Budget: ₹${monthlyBudget} | Remaining Monthly Budget: ₹${remainingMonthlyBudget}
+  * All-Time Net Available Balance: ₹${netBalance}
+  * Top Expense Categories This Month: ${topCategoriesList}
+  * Unusual / High Expenses This Month: ${unusualList}
+  * Category Monthly Budget Alerts: ${catAlertsList}
+  * Active Savings Goals: ${savingsGoalsList}
   * Recent Expenses: ${recentList}
   * Khata Debts: ${khataList}
   * CRED Discipline Score: ${disciplineScore} / 900
   * Emergency Lockdown: ${lockdownActive ? "ACTIVE (Frozen)" : "Inactive"}
 - Directives:
-  * Weave these real numbers naturally into banter instead of giving boring static stats.
+  * Weave these exact real numbers naturally into banter and financial advice. Never invent fake expenses or numbers.
   * If overspent (>100%): Roast them with supreme intelligence ('Sir, spending ${percentage}% of your daily quota is pure Thanos-level destruction of your savings').
-  * If doing well: Give genuinely motivating, legendary praise.
-  * Answer the actual latest question first. Do not force every answer back to spending telemetry, scores, Stark Industries, or lockdown.
-  * For greetings, reply naturally. For general questions, answer the topic directly in 2-5 sentences. Ask a brief clarifying question only when needed.
-  * Use history to understand follow-ups, but treat the latest user message as the main request.
-  * Only claim a transaction, budget, or lockdown change succeeded when a corresponding valid action is returned. Never pretend an action happened.
-  * Never invent financial facts. If a requested figure is absent from the supplied data, say you cannot see it.
-  * NEVER repeat canned formulas or static quotes. Make replies specific to the user's question and supplied data.
+  * If doing well: Give genuinely motivating, legendary praise and actionable saving suggestions.
   * DIRECT ACTIONS:
     - If user types or says 'Add 150 for chicken', 'Maine 40 ki chai pee', 'Swiggy pe 250 kharch hue', or any personal expense, call the addExpense function and confirm warmly: 'Logged ₹150 for Chicken, Sir. Quota updated. Anything else for your ledger?'
     - If user mentions a friend owing money or giving money to a friend (e.g. 'Kabir owes me 500 for dinner', 'Maine Rohan ko 300 diye', 'I owe Aman 200'), call the addKhataEntry function (positive amount if friend owes user, negative if user owes friend) and confirm the Khata update!
@@ -628,13 +755,86 @@ function buildGeminiPayload(
   return { systemInstruction, turns, tools: jarvisTools };
 }
 
+type BillingPlanKey = "monthly" | "quarterly";
+
+type RazorpaySubscription = {
+  id: string;
+  plan_id: string;
+  status: string;
+  current_end?: number;
+  notes?: Record<string, string>;
+};
+
+function getBillingServices() {
+  const existing = getAdminApps().find((app) => app.name === "kharchee-billing");
+  if (existing) {
+    return { auth: getAdminAuth(existing), db: getFirestore(existing) };
+  }
+  const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (rawServiceAccount) {
+    const account = JSON.parse(rawServiceAccount) as { project_id: string; client_email: string; private_key: string };
+    const adminApp = initializeAdminApp({
+      credential: cert({ projectId: account.project_id, clientEmail: account.client_email, privateKey: account.private_key }),
+      projectId: account.project_id || process.env.VITE_FIREBASE_PROJECT_ID,
+    }, "kharchee-billing");
+    return { auth: getAdminAuth(adminApp), db: getFirestore(adminApp) };
+  }
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    const adminApp = initializeAdminApp({
+      credential: applicationDefault(),
+      projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
+    }, "kharchee-billing");
+    return { auth: getAdminAuth(adminApp), db: getFirestore(adminApp) };
+  }
+  throw new Error("Firebase Admin credentials are not configured.");
+}
+
+async function verifyBillingUser(req: Request): Promise<string> {
+  const authorization = req.header("authorization") || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+  if (!token) throw new Error("Sign in to manage a Pro subscription.");
+  const { auth } = getBillingServices();
+  return (await auth.verifyIdToken(token, true)).uid;
+}
+
+function getRazorpayConfig() {
+  const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+  const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+  if (!keyId || !keySecret) throw new Error("Razorpay server credentials are not configured.");
+  return { keyId, keySecret };
+}
+
+function getPlanConfig(plan: BillingPlanKey) {
+  const planId = plan === "monthly" ? process.env.RAZORPAY_MONTHLY_PLAN_ID?.trim() : process.env.RAZORPAY_QUARTERLY_PLAN_ID?.trim();
+  if (!planId) throw new Error("Razorpay plan ID is not configured.");
+  return { planId, amountPaise: plan === "monthly" ? 3000 : 9900, label: plan === "monthly" ? "Kharchee Pro Monthly" : "Kharchee Pro Quarterly", totalCount: plan === "monthly" ? 120 : 40, periodMs: plan === "monthly" ? 30 * 24 * 60 * 60 * 1000 : 90 * 24 * 60 * 60 * 1000 };
+}
+
+async function razorpayApi<T>(pathName: string, method: "GET" | "POST", body?: unknown): Promise<T> {
+  const credentials = getRazorpayConfig();
+  const response = await fetch("https://api.razorpay.com/v1/" + pathName, {
+    method,
+    headers: { Authorization: "Basic " + Buffer.from(credentials.keyId + ":" + credentials.keySecret).toString("base64"), "Content-Type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const data = await response.json().catch(() => ({})) as T & { error?: { description?: string } };
+  if (!response.ok) throw new Error(data.error?.description || "Payment provider request failed.");
+  return data;
+}
+
+function secureSignatureMatches(message: string, suppliedSignature: string, secret: string): boolean {
+  const expectedBuffer = Buffer.from(createHmac("sha256", secret).update(message).digest("hex"), "utf8");
+  const suppliedBuffer = Buffer.from(suppliedSignature || "", "utf8");
+  return expectedBuffer.length === suppliedBuffer.length && timingSafeEqual(expectedBuffer, suppliedBuffer);
+}
+
 async function startServer() {
   const app = express();
   const defaultJsonParser = express.json({ limit: "256kb" });
   const ocrReceiptJsonParser = express.json({ limit: "8mb" });
 
   app.use((req: Request, res: Response, next: () => void) => {
-    if (req.path === "/api/ocr/receipt") {
+    if (req.path === "/api/ocr/receipt" || req.path === "/api/billing/webhook") {
       next();
       return;
     }
@@ -642,6 +842,196 @@ async function startServer() {
   });
 
   app.use("/api", apiRateLimiter);
+
+  app.post("/api/billing/subscription", async (req: Request, res: Response) => {
+    try {
+      const uid = await verifyBillingUser(req);
+      const plan = req.body?.plan as BillingPlanKey;
+      if (plan !== "monthly" && plan !== "quarterly") { res.status(400).json({ error: "Choose a valid Pro subscription plan." }); return; }
+      const credentials = getRazorpayConfig();
+      const planConfig = getPlanConfig(plan);
+      const razorpayPlan = await razorpayApi<{ id: string; period: string; interval: number; item?: { amount?: number; currency?: string } }>("plans/" + encodeURIComponent(planConfig.planId), "GET");
+      const expectedInterval = plan === "monthly" ? 1 : 3;
+      if (razorpayPlan.id !== planConfig.planId || razorpayPlan.item?.amount !== planConfig.amountPaise || razorpayPlan.item?.currency !== "INR" || razorpayPlan.period !== "monthly" || Number(razorpayPlan.interval) !== expectedInterval) {
+        throw new Error("Razorpay plan configuration mismatch. Confirm the exact price and billing interval in the Dashboard.");
+      }
+      const { db } = getBillingServices();
+      const currentBilling = await db.collection("users").doc(uid).collection("billing").doc("current").get();
+      const existingBilling = currentBilling.data();
+      const existingEnd = Number(existingBilling?.currentPeriodEnd || 0);
+      const existingStatus = String(existingBilling?.status || "");
+      const currentSubscriptionStillValid =
+        (["authenticated", "active"].includes(existingStatus) && (!existingEnd || existingEnd > Date.now())) ||
+        (existingStatus === "cancelled" && existingEnd > Date.now());
+      if (existingBilling && currentSubscriptionStillValid) {
+        res.status(409).json({ error: "Kharchee Pro is already active on this account." });
+        return;
+      }
+      const subscription = await razorpayApi<RazorpaySubscription>("subscriptions", "POST", {
+        plan_id: planConfig.planId, total_count: planConfig.totalCount, quantity: 1, customer_notify: 1,
+        notes: { firebase_uid: uid, product: "kharchee_pro", plan_key: plan },
+      });
+      await db.collection("billingSubscriptions").doc(subscription.id).set({
+        uid, subscriptionId: subscription.id, planKey: plan, planId: planConfig.planId, status: "created",
+        amountPaise: planConfig.amountPaise, createdAt: FieldValue.serverTimestamp(),
+      });
+      await db.collection("users").doc(uid).collection("billing").doc("current").set({
+        uid, subscriptionId: subscription.id, planKey: plan, status: "created", amountPaise: planConfig.amountPaise,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      res.status(201).json({ keyId: credentials.keyId, subscriptionId: subscription.id, plan, amountPaise: planConfig.amountPaise, label: planConfig.label });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not start checkout.";
+      const status = message.includes("Sign in") ? 401 : message.includes("not configured") ? 503 : 400;
+      res.status(status).json({ error: status === 503 ? "Pro billing is not configured yet. Please try again later." : message });
+    }
+  });
+
+  app.post("/api/billing/verify", async (req: Request, res: Response) => {
+    try {
+      const uid = await verifyBillingUser(req);
+      const paymentId = String(req.body?.razorpay_payment_id || "");
+      const subscriptionId = String(req.body?.razorpay_subscription_id || "");
+      const signature = String(req.body?.razorpay_signature || "");
+      if (!paymentId || !subscriptionId || !signature) { res.status(400).json({ error: "Payment confirmation details are incomplete." }); return; }
+      const credentials = getRazorpayConfig();
+      const { db } = getBillingServices();
+      const subscriptionRef = db.collection("billingSubscriptions").doc(subscriptionId);
+      const stored = await subscriptionRef.get();
+      if (!stored.exists || stored.data()?.uid !== uid) { res.status(403).json({ error: "This subscription does not belong to the signed-in account." }); return; }
+      if (!secureSignatureMatches(paymentId + "|" + subscriptionId, signature, credentials.keySecret)) { res.status(400).json({ error: "Payment signature verification failed." }); return; }
+      const remote = await razorpayApi<RazorpaySubscription>("subscriptions/" + encodeURIComponent(subscriptionId), "GET");
+      const record = stored.data()!;
+      const plan = record.planKey as BillingPlanKey;
+      const expectedPlan = getPlanConfig(plan);
+      if (remote.id !== subscriptionId || remote.plan_id !== expectedPlan.planId || remote.notes?.firebase_uid !== uid) {
+        res.status(400).json({ error: "The verified subscription does not match this account or plan." }); return;
+      }
+      if (!["authenticated", "active"].includes(remote.status)) {
+        res.status(409).json({ error: "Payment is awaiting subscription activation. Please check again shortly.", pending: true }); return;
+      }
+      const periodEnd = remote.current_end ? remote.current_end * 1000 : Date.now() + expectedPlan.periodMs;
+      const billingState = {
+        uid, subscriptionId, planKey: plan, status: remote.status, paymentId, currentPeriodEnd: periodEnd,
+        amountPaise: expectedPlan.amountPaise, verifiedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      };
+      await Promise.all([
+        subscriptionRef.set(billingState, { merge: true }),
+        db.collection("users").doc(uid).collection("billing").doc("current").set(billingState, { merge: true }),
+      ]);
+      res.status(200).json({ active: true, plan, currentPeriodEnd: periodEnd });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Payment verification failed.";
+      const status = message.includes("Sign in") ? 401 : message.includes("not configured") ? 503 : 400;
+      res.status(status).json({ error: status === 503 ? "Pro billing is not configured yet." : message });
+    }
+  });
+
+  app.post("/api/billing/cancel", async (req: Request, res: Response) => {
+    try {
+      const uid = await verifyBillingUser(req);
+      const { db } = getBillingServices();
+      const currentRef = db.collection("users").doc(uid).collection("billing").doc("current");
+      const current = await currentRef.get();
+      const currentData = current.data();
+      const subscriptionId = String(currentData?.subscriptionId || "");
+      if (!subscriptionId) {
+        res.status(404).json({ error: "No Pro subscription was found for this account." });
+        return;
+      }
+      const subscriptionRef = db.collection("billingSubscriptions").doc(subscriptionId);
+      const stored = await subscriptionRef.get();
+      if (!stored.exists || stored.data()?.uid !== uid) {
+        res.status(403).json({ error: "This subscription does not belong to the signed-in account." });
+        return;
+      }
+      const remote = await razorpayApi<RazorpaySubscription>("subscriptions/" + encodeURIComponent(subscriptionId) + "/cancel", "POST", { cancel_at_cycle_end: true });
+      const periodEnd = remote.current_end ? remote.current_end * 1000 : Number(currentData?.currentPeriodEnd || 0);
+      const state = {
+        uid, subscriptionId, planKey: currentData?.planKey || stored.data()?.planKey || null,
+        status: "cancelled", currentPeriodEnd: periodEnd || null, cancelAtCycleEnd: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      await Promise.all([
+        subscriptionRef.set(state, { merge: true }),
+        currentRef.set(state, { merge: true }),
+      ]);
+      res.status(200).json({
+        cancelled: true,
+        active: periodEnd > Date.now(),
+        currentPeriodEnd: periodEnd || null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not cancel subscription.";
+      const status = message.includes("Sign in") ? 401 : message.includes("not configured") ? 503 : 400;
+      res.status(status).json({ error: status === 503 ? "Subscription management is not configured yet." : message });
+    }
+  });
+
+  app.get("/api/billing/status", async (req: Request, res: Response) => {
+    try {
+      const uid = await verifyBillingUser(req);
+      const { db } = getBillingServices();
+      const snapshot = await db.collection("users").doc(uid).collection("billing").doc("current").get();
+      const record = snapshot.data();
+      if (!record) { res.status(200).json({ active: false, plan: null }); return; }
+      const periodEnd = Number(record.currentPeriodEnd || 0);
+      const active = (["authenticated", "active"].includes(String(record.status)) || (String(record.status) === "cancelled" && periodEnd > Date.now())) && (!periodEnd || periodEnd > Date.now());
+      res.status(200).json({ active, plan: active ? record.planKey || null : null, currentPeriodEnd: periodEnd || null, status: record.status || "inactive" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not read subscription status.";
+      const status = message.includes("Sign in") ? 401 : 503;
+      res.status(status).json({ error: status === 401 ? message : "Subscription status is temporarily unavailable." });
+    }
+  });
+
+  app.post("/api/billing/webhook", express.raw({ type: "application/json", limit: "256kb" }), async (req: Request, res: Response) => {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
+    if (!webhookSecret) { res.status(503).send("Webhook secret is not configured."); return; }
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
+    const suppliedSignature = String(req.header("x-razorpay-signature") || "");
+    const expectedBuffer = Buffer.from(createHmac("sha256", webhookSecret).update(rawBody).digest("hex"), "utf8");
+    const suppliedBuffer = Buffer.from(suppliedSignature, "utf8");
+    if (expectedBuffer.length !== suppliedBuffer.length || !timingSafeEqual(expectedBuffer, suppliedBuffer)) { res.status(400).send("Invalid webhook signature."); return; }
+    try {
+      const event = JSON.parse(rawBody.toString("utf8")) as {
+        event?: string;
+        payload?: { subscription?: { entity?: RazorpaySubscription }; payment?: { entity?: { subscription_id?: string } } };
+      };
+      const subscription = event.payload?.subscription?.entity;
+      const subscriptionId = subscription?.id || event.payload?.payment?.entity?.subscription_id;
+      if (!subscriptionId) { res.status(200).json({ received: true, ignored: true }); return; }
+      const { db } = getBillingServices();
+      const subscriptionRef = db.collection("billingSubscriptions").doc(subscriptionId);
+      const stored = await subscriptionRef.get();
+      if (!stored.exists) { res.status(200).json({ received: true, ignored: true }); return; }
+      const uid = String(stored.data()?.uid || "");
+      const eventId = req.header("x-razorpay-event-id") || "";
+      if (eventId) {
+        const eventRef = db.collection("billingWebhookEvents").doc(eventId);
+        if ((await eventRef.get()).exists) { res.status(200).json({ received: true, duplicate: true }); return; }
+      }
+      const eventName = String(event.event || "");
+      const remoteStatus = String(subscription?.status || "");
+      const activeEvent = ["subscription.authenticated", "subscription.activated", "subscription.charged"].includes(eventName);
+      const inactiveEvent = ["subscription.cancelled", "subscription.halted", "subscription.completed", "subscription.expired"].includes(eventName);
+      if (activeEvent || inactiveEvent) {
+        const status = activeEvent ? (remoteStatus || "active") : (remoteStatus || eventName.split(".")[1] || "inactive");
+        const periodEnd = subscription?.current_end ? subscription.current_end * 1000 : Number(stored.data()?.currentPeriodEnd || 0);
+        const state = { uid, subscriptionId, status, currentPeriodEnd: periodEnd || null, updatedAt: FieldValue.serverTimestamp() };
+        await Promise.all([
+          subscriptionRef.set(state, { merge: true }),
+          db.collection("users").doc(uid).collection("billing").doc("current").set(state, { merge: true }),
+        ]);
+      }
+      if (eventId) {
+        await db.collection("billingWebhookEvents").doc(eventId).set({ event: event.event || "unknown", receivedAt: FieldValue.serverTimestamp() });
+      }
+      res.status(200).json({ received: true });
+    } catch {
+      res.status(500).send("Webhook processing failed.");
+    }
+  });
 
   // Real-Time Streaming Endpoint (SSE)
   app.post("/api/jarvis/stream", async (req: Request, res: Response) => {
@@ -699,9 +1089,7 @@ async function startServer() {
       res.end();
     };
 
-    // Gemini can take several seconds to start streaming; do not replace valid answers
-    // with the same canned fallback after only 2.6 seconds.
-    const serverWatchdog = setTimeout(sendFallbackStreamAndClose, 20000);
+    const serverWatchdog = setTimeout(sendFallbackStreamAndClose, 2600);
 
     try {
       const { systemInstruction, turns, tools } = buildGeminiPayload(
@@ -716,7 +1104,7 @@ async function startServer() {
         contents: turns,
         config: {
           systemInstruction,
-          temperature: 0.75,
+          temperature: 0.85,
           tools,
         },
       });
@@ -1019,32 +1407,77 @@ async function startServer() {
     }
   });
 
-  // Receipt / Bill OCR Scanner Endpoint (8MB scoped JSON body limit)
-  app.post("/api/ocr/receipt", ocrReceiptJsonParser, async (req: Request, res: Response) => {
-    res.setHeader("Content-Type", "application/json");
-    const { imageBase64, mimeType } = req.body as {
-      imageBase64?: string;
-      mimeType?: string;
-      fileName?: string;
-    };
+  // Receipt / Bill OCR Scanner Endpoint (8MB scoped JSON body limit + strict MIME & base64 validation)
+  const ALLOWED_OCR_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+  const MAX_BASE64_LENGTH = 7 * 1024 * 1024; // ~5.25MB decoded image max
 
-    if (!imageBase64) {
-      res.status(400).json({
-        error: "Receipt scan unreadable or API key missing. Please enter manually.",
+  app.post(
+    "/api/ocr/receipt",
+    (req: Request, res: Response, next: () => void) => {
+      ocrReceiptJsonParser(req, res, (err?: unknown) => {
+        if (err) {
+          res.status(400).json({
+            error: "Malformed or oversized receipt payload. Maximum allowed size is 5MB (JPEG, PNG, or WebP).",
+          });
+          return;
+        }
+        next();
       });
-      return;
-    }
+    },
+    async (req: Request, res: Response) => {
+      res.setHeader("Content-Type", "application/json");
+      const { imageBase64, mimeType } = (req.body || {}) as {
+        imageBase64?: unknown;
+        mimeType?: unknown;
+        fileName?: unknown;
+      };
 
-    const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, "");
-    const resolvedMimeType = mimeType || "image/jpeg";
+      if (typeof imageBase64 !== "string" || !imageBase64.trim()) {
+        res.status(400).json({
+          error: "Missing receipt image payload. Please upload a valid JPEG, PNG, or WebP image.",
+        });
+        return;
+      }
 
-    const ai = getGenAIClient();
-    if (!ai) {
-      res.status(503).json({
-        error: "Receipt scan unreadable or API key missing. Please enter manually.",
-      });
-      return;
-    }
+      // Extract optional data URI header if present: data:image/jpeg;base64,...
+      const dataUriMatch = imageBase64.match(/^data:([^;]+);base64,(.*)$/s);
+      const declaredMime =
+        typeof mimeType === "string" && mimeType.trim()
+          ? mimeType.trim().toLowerCase()
+          : dataUriMatch
+          ? dataUriMatch[1].trim().toLowerCase()
+          : "";
+
+      if (!ALLOWED_OCR_MIME_TYPES.has(declaredMime)) {
+        res.status(400).json({
+          error: "Unsupported file type. Only image/jpeg, image/png, and image/webp are allowed.",
+        });
+        return;
+      }
+
+      const cleanBase64 = (dataUriMatch ? dataUriMatch[2] : imageBase64).replace(/\s+/g, "");
+
+      if (
+        cleanBase64.length < 32 ||
+        cleanBase64.length > MAX_BASE64_LENGTH ||
+        cleanBase64.length % 4 !== 0 ||
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(cleanBase64)
+      ) {
+        res.status(400).json({
+          error: "Malformed or out-of-bounds base64 image data. Please upload a valid receipt image.",
+        });
+        return;
+      }
+
+      const resolvedMimeType = declaredMime;
+
+      const ai = getGenAIClient();
+      if (!ai) {
+        res.status(503).json({
+          error: "Receipt scan unreadable or API key missing. Please enter manually.",
+        });
+        return;
+      }
 
     try {
       const response = await ai.models.generateContent({

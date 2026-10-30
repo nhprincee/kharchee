@@ -43,8 +43,42 @@ interface AddExpenseModalProps {
     paymentMode: PaymentMode;
     type?: TransactionType;
     note?: string;
+    timestamp?: string;
   }) => void;
   onUpdateExpense?: (expense: Expense) => void;
+}
+
+function getLocalDateInputValue(isoString?: string): string {
+  const dt = isoString ? new Date(isoString) : new Date();
+  if (Number.isNaN(dt.getTime())) {
+    const fallback = new Date();
+    return `${fallback.getFullYear()}-${String(fallback.getMonth() + 1).padStart(2, "0")}-${String(
+      fallback.getDate()
+    ).padStart(2, "0")}`;
+  }
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
+    dt.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function buildIsoFromDateInput(dateStr: string, referenceIso?: string): string {
+  const parts = dateStr.split("-").map(Number);
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
+    return referenceIso || new Date().toISOString();
+  }
+  const [y, m, d] = parts;
+  const ref = referenceIso ? new Date(referenceIso) : new Date();
+  const base = Number.isNaN(ref.getTime()) ? new Date() : ref;
+  const combined = new Date(
+    y,
+    m - 1,
+    d,
+    base.getHours(),
+    base.getMinutes(),
+    base.getSeconds(),
+    base.getMilliseconds()
+  );
+  return combined.toISOString();
 }
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -148,12 +182,16 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("Food");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("UPI");
+  const [txDate, setTxDate] = useState<string>(() => getLocalDateInputValue());
   const [note, setNote] = useState("");
   const [overrideConfirmed, setOverrideConfirmed] = useState(false);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const lastSubmitSignatureRef = useRef<{ sig: string; time: number }>({ sig: "", time: 0 });
 
   useEffect(() => {
     if (!isOpen) return;
+    setIsSubmitting(false);
     if (editingExpense) {
       setActiveTab("manual");
       const editType: TransactionType = editingExpense.type === "income" ? "income" : "expense";
@@ -162,6 +200,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       setAmount(String(editingExpense.amount));
       setCategory(editingExpense.category);
       setPaymentMode(editingExpense.paymentMode);
+      setTxDate(getLocalDateInputValue(editingExpense.timestamp));
       setNote(editingExpense.note || "");
       setError("");
     } else {
@@ -170,6 +209,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       setCategory(initialType === "income" ? "Salary" : "Food");
       setTitle("");
       setAmount("");
+      setTxDate(getLocalDateInputValue());
       setNote("");
       setError("");
     }
@@ -248,10 +288,26 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       paymentMode: PaymentMode;
       type?: TransactionType;
       note?: string;
+      timestamp?: string;
     },
     forceProceed = false
   ) => {
+    if (isSubmitting) return;
+
+    const nowMs = Date.now();
+    const signature = `${payload.type || "expense"}|${payload.title.toLowerCase()}|${payload.amount}|${payload.category}|${payload.paymentMode}`;
+    if (
+      !editingExpense &&
+      !forceProceed &&
+      lastSubmitSignatureRef.current.sig === signature &&
+      nowMs - lastSubmitSignatureRef.current.time < 1500
+    ) {
+      setError("Duplicate submission prevented. This transaction was just logged.");
+      return;
+    }
+
     if (editingExpense && onUpdateExpense) {
+      setIsSubmitting(true);
       onUpdateExpense({
         ...editingExpense,
         title: payload.title,
@@ -260,6 +316,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         paymentMode: payload.paymentMode,
         type: payload.type || "expense",
         note: payload.note,
+        timestamp: payload.timestamp || editingExpense.timestamp,
       });
       onClose();
       return;
@@ -301,6 +358,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       return;
     }
 
+    setIsSubmitting(true);
+    lastSubmitSignatureRef.current = { sig: signature, time: nowMs };
     onAddExpense(payload);
     setMidnightCravingExpense(null);
     setCoolOffExpense(null);
@@ -570,13 +629,18 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   const handleSubmitManual = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     const numericAmount = Number(amount);
     if (!title.trim()) {
       setError(transactionType === "income" ? "Enter income source title." : "Enter expense title.");
       return;
     }
-    if (Number.isNaN(numericAmount) || numericAmount <= 0) {
-      setError("Enter a valid rupee amount.");
+    if (Number.isNaN(numericAmount) || numericAmount <= 0 || numericAmount > 10000000) {
+      setError("Enter a valid rupee amount between ₹1 and ₹1,00,00,000.");
+      return;
+    }
+    if (!txDate || Number.isNaN(Date.parse(txDate))) {
+      setError("Please select a valid transaction date.");
       return;
     }
     if (lockdownActive && transactionType === "expense" && !overrideConfirmed) {
@@ -584,13 +648,25 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       return;
     }
 
+    const safeCategory: ExpenseCategory =
+      transactionType === "income"
+        ? INCOME_CATEGORIES.includes(category)
+          ? category
+          : "Salary"
+        : CATEGORIES.includes(category)
+        ? category
+        : "Food";
+
+    const computedTimestamp = buildIsoFromDateInput(txDate, editingExpense?.timestamp);
+
     commitOrInterceptExpense({
       title: title.trim(),
       amount: Math.round(numericAmount),
-      category,
+      category: safeCategory,
       paymentMode,
       type: transactionType,
       note: note.trim() || undefined,
+      timestamp: computedTimestamp,
     });
   };
 
@@ -1401,7 +1477,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <div>
                 <span className="block text-[11px] font-bold text-slate-300 mb-1">
                   Payment Mode
@@ -1422,6 +1498,23 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="tx-date" className="block text-[11px] font-bold text-slate-300 mb-1">
+                  Date
+                </label>
+                <input
+                  id="tx-date"
+                  type="date"
+                  value={txDate}
+                  max={getLocalDateInputValue()}
+                  onChange={(e) => {
+                    setTxDate(e.target.value);
+                    setError("");
+                  }}
+                  className="w-full h-[38px] px-2.5 rounded-xl bg-slate-900 border border-white/10 text-xs font-mono text-slate-200 focus:outline-none"
+                />
               </div>
 
               <div>
@@ -1451,13 +1544,16 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               </button>
               <button
                 type="submit"
-                className={`flex-1 h-11 rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all text-white ${
+                disabled={isSubmitting}
+                className={`flex-1 h-11 rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all text-white disabled:opacity-50 disabled:cursor-not-allowed ${
                   transactionType === "income"
                     ? "bg-emerald-600 hover:bg-emerald-500"
                     : "bg-indigo-600 hover:bg-indigo-500"
                 }`}
               >
-                {editingExpense
+                {isSubmitting
+                  ? "Saving..."
+                  : editingExpense
                   ? "Update Transaction"
                   : transactionType === "income"
                   ? "Save Income"

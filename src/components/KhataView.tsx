@@ -62,7 +62,7 @@ interface KhataViewProps {
 export const KhataView: React.FC<KhataViewProps> = ({
   friends,
   theme,
-  myUpiId = "mrigander@upi",
+  myUpiId = "",
   onUpdateMyUpiId,
   onAddEntry,
   onAddFriendAndEntry,
@@ -74,6 +74,11 @@ export const KhataView: React.FC<KhataViewProps> = ({
   const [activePanel, setActivePanel] = useState<"none" | "new" | "split">("none");
   const [roastMode, setRoastMode] = useState<boolean>(true);
   const [roastIndex, setRoastIndex] = useState<number>(0);
+
+  const cleanMyUpi = (myUpiId || "").trim();
+  const hasConfiguredUpi = Boolean(
+    cleanMyUpi && cleanMyUpi.includes("@") && cleanMyUpi.toLowerCase() !== "mrigander@upi"
+  );
 
   // Autonomous Auto-Pilot Recovery Agent State (1-Time Initial Permission)
   const [autoPilotRecoveryEnabled, setAutoPilotRecoveryEnabled] = useState<boolean>(() => {
@@ -231,19 +236,31 @@ export const KhataView: React.FC<KhataViewProps> = ({
       .map((e) => `${e.description} (₹${e.amount})`)
       .join(", ");
 
-    const recipientUpi = myUpiId || "mrigander@upi";
-    const upiPayLink = `upi://pay?pa=${encodeURIComponent(recipientUpi)}&pn=Mrigander&am=${Math.abs(
-      netAmount
-    )}&tn=KharcheKhata&cu=INR`;
+    const upiPayLink = hasConfiguredUpi
+      ? `upi://pay?pa=${encodeURIComponent(cleanMyUpi)}&pn=KharcheeUser&am=${Math.abs(
+          netAmount
+        )}&tn=KharcheKhata&cu=INR`
+      : "";
 
     if (roastMode) {
       const roastLine = getHinglishRoastLine(friend.name, netAmount, latestItems);
-      return `🔥 *KHARCHE SAVAGE VASOOLI ALERT* 🔥\n\n"${roastLine}"\n\n💰 Pending Udhaar: *₹${netAmount}*\n⚡ 1-Tap Direct UPI (${recipientUpi}):\n${upiPayLink}`;
+      return (
+        `🔥 *KHARCHE SAVAGE VASOOLI ALERT* 🔥\n\n"${roastLine}"\n\n💰 Pending Udhaar: *₹${netAmount}*` +
+        (hasConfiguredUpi
+          ? `\n⚡ 1-Tap Direct UPI (${cleanMyUpi}):\n${upiPayLink}`
+          : `\n⚠️ _(Configure your personal UPI ID in Settings/Profile to attach a direct UPI link)_`)
+      );
     }
 
-    return `Hey ${friend.name.split(" ")[0]}! Quick KHARCHE Khata reminder: ₹${netAmount} pending${
-      latestItems ? ` for ${latestItems}` : ""
-    }.\n\nPay directly to my account via UPI:\n${upiPayLink}\n\nJab free ho pay kar dena!`;
+    return (
+      `Hey ${friend.name.split(" ")[0]}! Quick KHARCHE Khata reminder: ₹${netAmount} pending${
+        latestItems ? ` for ${latestItems}` : ""
+      }.\n\n` +
+      (hasConfiguredUpi
+        ? `Pay directly to my account via UPI:\n${upiPayLink}\n\n`
+        : "") +
+      `Jab free ho pay kar dena!`
+    );
   };
 
   const buildWhatsAppUrl = (phone: string, message: string) => {
@@ -356,11 +373,19 @@ export const KhataView: React.FC<KhataViewProps> = ({
             </span>
             {!isEditingMyUpi ? (
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-xs font-mono font-bold text-cyan-300">{myUpiId}</span>
+                {hasConfiguredUpi ? (
+                  <span className="text-xs font-mono font-bold text-cyan-300">
+                    {cleanMyUpi}
+                  </span>
+                ) : (
+                  <span className="text-xs font-mono font-semibold text-amber-300">
+                    Not set — Add your UPI ID
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => {
-                    setMyUpiDraft(myUpiId);
+                    setMyUpiDraft(hasConfiguredUpi ? cleanMyUpi : "");
                     setIsEditingMyUpi(true);
                   }}
                   className="p-1 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
@@ -375,10 +400,12 @@ export const KhataView: React.FC<KhataViewProps> = ({
                 onSubmit={(e) => {
                   e.preventDefault();
                   const clean = myUpiDraft.trim();
-                  if (clean) {
+                  if (clean && clean.includes("@")) {
                     onUpdateMyUpiId?.(clean);
                     setIsEditingMyUpi(false);
                     onShowToast?.(`Receiving UPI ID updated to ${clean}`);
+                  } else {
+                    onShowToast?.("Please enter a valid UPI ID (e.g. yourname@okhdfcbank)");
                   }
                 }}
                 className="flex items-center gap-1.5 mt-0.5"
@@ -387,8 +414,8 @@ export const KhataView: React.FC<KhataViewProps> = ({
                   type="text"
                   value={myUpiDraft}
                   onChange={(e) => setMyUpiDraft(e.target.value)}
-                  placeholder="e.g. mrigander@upi"
-                  className="h-7 px-2 text-xs font-mono rounded-lg bg-slate-950 border border-cyan-400 text-cyan-200 focus:outline-none w-36"
+                  placeholder="e.g. yourname@okhdfcbank"
+                  className="h-7 px-2 text-xs font-mono rounded-lg bg-slate-950 border border-cyan-400 text-cyan-200 focus:outline-none w-44"
                   autoFocus
                 />
                 <button
@@ -413,19 +440,25 @@ export const KhataView: React.FC<KhataViewProps> = ({
 
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            if (!hasConfiguredUpi) {
+              setMyUpiDraft("");
+              setIsEditingMyUpi(true);
+              onShowToast?.("Please enter and save your personal UPI ID first to generate QR codes.");
+              return;
+            }
             setQrModalState({
               isOpen: true,
               amount: totalToReceive > 0 ? totalToReceive : 500,
-            })
-          }
+            });
+          }}
           style={{
             borderColor: `${theme.accentHex}40`,
           }}
           className="h-8 px-3 rounded-xl bg-slate-950 border text-xs font-bold text-slate-100 flex items-center gap-1.5 cursor-pointer hover:bg-slate-800 transition-all active:scale-95 shadow-2xs"
         >
           <QrCode className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Show My QR</span>
+          <span>{hasConfiguredUpi ? "Show My QR" : "Set UPI ID First"}</span>
         </button>
       </div>
 
@@ -694,26 +727,38 @@ export const KhataView: React.FC<KhataViewProps> = ({
         ];
         const totalAttendees = Math.max(1, attendeeNames.length);
         const perPersonSplitAmt = Math.ceil(parsedSplitTotal / totalAttendees);
-        const activeReceivingUpi = myUpiId || "mrigander@upi";
-        const splitUpiDeepLink = `upi://pay?pa=${encodeURIComponent(
-          activeReceivingUpi
-        )}&pn=Mrigander&am=${perPersonSplitAmt}&cu=INR&tn=${encodeURIComponent(
-          `Split: ${splitDesc || "Group Bill"}`
-        )}`;
-        const groupWhatsappText = `⚡ *KHARCHE CYBERPUNK GROUP SPLIT BILL* ⚡\n\n🧾 Bill: *${
-          splitDesc || "Squad Outing"
-        }*\n💰 Total Amount: *₹${parsedSplitTotal.toLocaleString(
-          "en-IN"
-        )}*\n👥 Attendees (${totalAttendees}): ${attendeeNames.join(
-          ", "
-        )}\n🔥 Per Person Share: *₹${perPersonSplitAmt.toLocaleString(
-          "en-IN"
-        )}*\n\n📲 *1-Tap Direct UPI Settlement (${activeReceivingUpi}):*\n${splitUpiDeepLink}\n\n_Scan the attached Stark QR receipt or tap the UPI link above to settle instantly!_`;
+        const activeReceivingUpi = hasConfiguredUpi ? cleanMyUpi : "";
+        const splitUpiDeepLink = hasConfiguredUpi
+          ? `upi://pay?pa=${encodeURIComponent(
+              activeReceivingUpi
+            )}&pn=KharcheeUser&am=${perPersonSplitAmt}&cu=INR&tn=${encodeURIComponent(
+              `Split: ${splitDesc || "Group Bill"}`
+            )}`
+          : "";
+        const groupWhatsappText =
+          `⚡ *KHARCHE CYBERPUNK GROUP SPLIT BILL* ⚡\n\n🧾 Bill: *${
+            splitDesc || "Squad Outing"
+          }*\n💰 Total Amount: *₹${parsedSplitTotal.toLocaleString(
+            "en-IN"
+          )}*\n👥 Attendees (${totalAttendees}): ${attendeeNames.join(
+            ", "
+          )}\n🔥 Per Person Share: *₹${perPersonSplitAmt.toLocaleString(
+            "en-IN"
+          )}*\n\n` +
+          (hasConfiguredUpi
+            ? `📲 *1-Tap Direct UPI Settlement (${activeReceivingUpi}):*\n${splitUpiDeepLink}\n\n_Scan the attached Stark QR receipt or tap the UPI link above to settle instantly!_`
+            : `⚠️ _(Save your personal UPI ID in Settings/Profile to attach a 1-tap UPI settlement link)_`);
         const groupWhatsappUrl = `https://wa.me/?text=${encodeURIComponent(
           groupWhatsappText
         )}`;
 
         const handleDownloadOrShareReceipt = (openWhatsAppAfter = false) => {
+          if (!hasConfiguredUpi) {
+            setMyUpiDraft("");
+            setIsEditingMyUpi(true);
+            onShowToast?.("Please enter and save your personal UPI ID first to generate a Split UPI Receipt.");
+            return;
+          }
           playStarkPowerSurgeSwoosh();
           const canvas = document.createElement("canvas");
           canvas.width = 900;
@@ -947,19 +992,35 @@ export const KhataView: React.FC<KhataViewProps> = ({
                       ))}
                     </div>
                     <p className="text-[10px] font-mono text-amber-300 pt-1 truncate">
-                      Receiving UPI: <span className="font-bold">{activeReceivingUpi}</span>
+                      Receiving UPI:{" "}
+                      <span className="font-bold">
+                        {hasConfiguredUpi ? activeReceivingUpi : "Not Configured — Add in Profile/Khata"}
+                      </span>
                     </p>
                   </div>
 
-                  <div className="p-2 rounded-xl bg-white shrink-0 shadow-[0_0_16px_rgba(34,211,238,0.35)]">
-                    <QRCodeSVG
-                      id="khata-group-split-qr-svg"
-                      value={splitUpiDeepLink}
-                      size={78}
-                      level="M"
-                      includeMargin={false}
-                    />
-                  </div>
+                  {hasConfiguredUpi ? (
+                    <div className="p-2 rounded-xl bg-white shrink-0 shadow-[0_0_16px_rgba(34,211,238,0.35)]">
+                      <QRCodeSVG
+                        id="khata-group-split-qr-svg"
+                        value={splitUpiDeepLink}
+                        size={78}
+                        level="M"
+                        includeMargin={false}
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMyUpiDraft("");
+                        setIsEditingMyUpi(true);
+                      }}
+                      className="px-2.5 py-2 rounded-xl bg-amber-500/15 border border-amber-400/50 text-[10px] font-mono font-bold text-amber-300 shrink-0 cursor-pointer hover:bg-amber-500/25"
+                    >
+                      + Set UPI ID
+                    </button>
+                  )}
                 </div>
 
                 {/* 1-Tap Share Bill to WhatsApp Group + Snapshot Download */}

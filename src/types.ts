@@ -46,11 +46,9 @@ export interface KhataFriend {
 
 export type ThemeId =
   | "stark"
-  | "avengers"
-  | "realmadrid"
-  | "barcelona"
-  | "liverpool"
-  | "manutd";
+  | "midnight"
+  | "emerald"
+  | "armor";
 
 export interface FanTheme {
   id: ThemeId;
@@ -89,6 +87,33 @@ export interface JarvisMessage {
   };
 }
 
+export const EXPENSE_ONLY_CATEGORIES: ExpenseCategory[] = [
+  "Food",
+  "Chai & Snacks",
+  "Transport",
+  "Grocery",
+  "Entertainment",
+  "Bills",
+  "Shopping",
+];
+
+export const INCOME_ONLY_CATEGORIES: ExpenseCategory[] = [
+  "Salary",
+  "Freelance",
+  "Cashback",
+];
+
+export type CategoryBudgets = Partial<Record<ExpenseCategory, number>>;
+
+export interface SavingsGoal {
+  id: string;
+  title: string;
+  targetAmount: number;
+  savedAmount: number;
+  deadline?: string;
+  createdAt: string;
+}
+
 export interface QuickAddPreset {
   id: string;
   emoji: string;
@@ -96,3 +121,4 @@ export interface QuickAddPreset {
   amount: number;
   category: ExpenseCategory;
 }
+

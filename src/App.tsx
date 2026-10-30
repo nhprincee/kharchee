@@ -28,16 +28,20 @@ import {
   detectClipboardTransaction,
   type DetectedClipboardTx,
 } from "./utils/smsParser";
-import type {
-  Expense,
-  ExpenseCategory,
-  KhataFriend,
-  PaymentMode,
-  QuickAddPreset,
-  TabId,
-  ThemeId,
+import {
+  EXPENSE_ONLY_CATEGORIES,
+  INCOME_ONLY_CATEGORIES,
+  type CategoryBudgets,
+  type Expense,
+  type ExpenseCategory,
+  type KhataFriend,
+  type PaymentMode,
+  type QuickAddPreset,
+  type SavingsGoal,
+  type TabId,
+  type ThemeId,
 } from "./types";
-import { FAN_THEMES } from "./themes";
+import { DEFAULT_THEME_ID, FAN_THEMES, getSafeThemeId } from "./themes";
 import { createInitialExpenses, createInitialKhata } from "./data/initialData";
 import { ThemeBackdrop } from "./components/ThemeBackdrop";
 import { ThemeSelector } from "./components/ThemeSelector";
@@ -51,6 +55,7 @@ import { KhataView } from "./components/KhataView";
 import { ProView } from "./components/ProView";
 import { JarvisDrawer } from "./components/JarvisDrawer";
 import { ProfileDrawer } from "./components/ProfileDrawer";
+import { getCurrentUserIdToken } from "./components/AuthGate";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { AppTour } from "./components/AppTour";
 import { ProTrialModal } from "./components/ProTrialModal";
@@ -63,6 +68,65 @@ import {
   requestNotificationPermission,
   sendKharcheNotification,
 } from "./utils/notifications";
+import {
+  buildTransactionFingerprint,
+  evaluateSpendingAccountability,
+  isDuplicateFingerprint,
+  loadAccountabilitySettings,
+  loadAlertHistory,
+  parseUpiPaymentNotification,
+  recordFingerprintSeen,
+  saveAccountabilitySettings,
+  saveAlertHistory,
+  type AccountabilityAlertRecord,
+  type UpiAccountabilitySettings,
+} from "./utils/upiAccountabilityEngine";
+import { AccountabilityAlertBanner } from "./components/AccountabilityAlertBanner";
+import { UpiAccountabilityModal } from "./components/UpiAccountabilityModal";
+
+type RazorpayPaymentResponse = {
+  razorpay_payment_id: string;
+  razorpay_subscription_id: string;
+  razorpay_signature: string;
+};
+type RazorpayFailureResponse = { error?: { description?: string } };
+type RazorpayCheckoutOptions = {
+  key: string;
+  subscription_id: string;
+  name: string;
+  description: string;
+  handler: (response: RazorpayPaymentResponse) => void | Promise<void>;
+  theme?: { color?: string };
+  modal?: { ondismiss?: () => void };
+};
+type RazorpayCheckoutInstance = {
+  open: () => void;
+  on: (event: string, handler: (response: RazorpayFailureResponse) => void) => void;
+};
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckoutInstance;
+  }
+}
+
+async function loadRazorpayCheckout(): Promise<void> {
+  if (window.Razorpay) return;
+  await new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-razorpay-checkout="true"]');
+    const script = existing || document.createElement("script");
+    const onLoad = () => window.Razorpay ? resolve() : reject(new Error("Secure checkout could not be loaded."));
+    const onError = () => reject(new Error("Secure checkout could not be loaded. Check your connection and try again."));
+    script.addEventListener("load", onLoad, { once: true });
+    script.addEventListener("error", onError, { once: true });
+    if (!existing) {
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.dataset.razorpayCheckout = "true";
+      document.body.appendChild(script);
+    }
+  });
+  if (!window.Razorpay) throw new Error("Secure checkout is unavailable.");
+}
 
 const STORAGE_KEYS = {
   expenses: "kharche_expenses_v1",
@@ -75,7 +139,29 @@ const STORAGE_KEYS = {
   notifications: "kharche_notifications_v1",
   onboarding: "kharche_onboarding_completed_v1",
   financialProfile: "kharche_financial_profile_v1",
+  categoryBudgets: "kharche_category_budgets_v1",
+  savingsGoals: "kharche_savings_goals_v1",
 };
+
+const DEFAULT_CATEGORY_BUDGETS: CategoryBudgets = {
+  Food: 4500,
+  "Chai & Snacks": 1500,
+  Transport: 2500,
+  Grocery: 3000,
+  Entertainment: 1500,
+  Bills: 3500,
+  Shopping: 2500,
+};
+
+const DEFAULT_SAVINGS_GOALS: SavingsGoal[] = [
+  {
+    id: "goal-emergency-fund",
+    title: "Emergency Rainy-Day Fund",
+    targetAmount: 25000,
+    savedAmount: 8500,
+    createdAt: new Date().toISOString(),
+  },
+];
 
 function getDynamicGreeting(date: Date): string {
   const hour = date.getHours();
@@ -219,16 +305,66 @@ export function App() {
     return createInitialKhata();
   });
 
+  const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudgets>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.categoryBudgets);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          const clean: CategoryBudgets = {};
+          for (const cat of EXPENSE_ONLY_CATEGORIES) {
+            const val = Number((parsed as Record<string, unknown>)[cat]);
+            if (Number.isFinite(val) && val >= 0 && val <= 10000000) {
+              clean[cat] = Math.round(val);
+            }
+          }
+          return clean;
+        }
+      } catch {
+        return DEFAULT_CATEGORY_BUDGETS;
+      }
+    }
+    return DEFAULT_CATEGORY_BUDGETS;
+  });
+
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.savingsGoals);
+    if (saved !== null) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (g): g is SavingsGoal =>
+              Boolean(
+                g &&
+                  typeof g === "object" &&
+                  typeof g.id === "string" &&
+                  typeof g.title === "string" &&
+                  typeof g.targetAmount === "number" &&
+                  g.targetAmount > 0 &&
+                  typeof g.savedAmount === "number" &&
+                  g.savedAmount >= 0
+              )
+          );
+        }
+      } catch {
+        return DEFAULT_SAVINGS_GOALS;
+      }
+    }
+    return DEFAULT_SAVINGS_GOALS;
+  });
+
   const [lockdownActive, setLockdownActive] = useState<boolean>(() => {
     return localStorage.getItem(STORAGE_KEYS.lockdown) === "true";
   });
 
   const [themeId, setThemeId] = useState<ThemeId>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.theme);
-    if (saved && saved in FAN_THEMES) {
-      return saved as ThemeId;
+    const safeId = getSafeThemeId(saved);
+    if (saved && saved !== safeId) {
+      localStorage.setItem(STORAGE_KEYS.theme, safeId);
     }
-    return "avengers";
+    return safeId;
   });
 
   const [customThemeOverride, setCustomThemeOverride] = useState<{
@@ -237,22 +373,9 @@ export function App() {
     glowIntensity: number;
   } | null>(null);
 
-  const [isProActive, setIsProActive] = useState<boolean>(() => {
-    // Payment Verification Safeguard: 12-digit UTR format check is not payment verification.
-    // Client-side strings or flags do not grant paid Pro access.
-    // Preserved 3-Day Free Trial provides legitimate feature access.
-    const trialClaimed = localStorage.getItem("kharche_pro_trial_v1") === "claimed";
-    const expiresAtRaw = localStorage.getItem("kharche_pro_trial_expires_at_v1");
-    if (trialClaimed || expiresAtRaw) {
-      const expiresAt = Number(expiresAtRaw || 0);
-      if (Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() <= expiresAt) {
-        return true;
-      }
-      localStorage.setItem(STORAGE_KEYS.pro, "false");
-      return false;
-    }
-    return false;
-  });
+  // Payment Verification Safeguard: Never unlock Pro from localStorage, UTR input, or client-side toggles.
+  // Pro status is verified strictly via the server (/api/pro/status & /api/pro/verify-payment).
+  const [isProActive, setIsProActive] = useState<boolean>(false);
 
   const [autoLockdownAt90, setAutoLockdownAt90] = useState<boolean>(() => {
     return localStorage.getItem(STORAGE_KEYS.autoLockdown) === "true";
@@ -276,6 +399,15 @@ export function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [isRewardVaultOpen, setIsRewardVaultOpen] = useState(false);
+  const [isUpiGuardModalOpen, setIsUpiGuardModalOpen] = useState(false);
+  const [upiSettings, setUpiSettings] = useState<UpiAccountabilitySettings>(() =>
+    loadAccountabilitySettings()
+  );
+  const [upiAlertHistory, setUpiAlertHistory] = useState<AccountabilityAlertRecord[]>(() =>
+    loadAlertHistory()
+  );
+  const [activeAccountabilityAlert, setActiveAccountabilityAlert] =
+    useState<AccountabilityAlertRecord | null>(null);
   const [unlockedBadgeIds, setUnlockedBadgeIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem("kharche_stark_unlocked_badges_v1");
@@ -458,9 +590,10 @@ export function App() {
     deletedExpense?: Expense;
   } | null>(null);
 
-  // Receiving UPI ID (Khata Direct Settlement)
+  // Receiving UPI ID (Khata Direct Settlement - only set when user configures their own UPI ID)
   const [myUpiId, setMyUpiId] = useState<string>(() => {
-    return localStorage.getItem("kharche_my_upi_id_v1") || "mrigander@upi";
+    const saved = (localStorage.getItem("kharche_my_upi_id_v1") || "").trim();
+    return saved && saved.toLowerCase() !== "mrigander@upi" ? saved : "";
   });
 
   // Global Smart Clipboard & SMS Auto-Detection State
@@ -537,6 +670,14 @@ export function App() {
   }, [khataFriends]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.categoryBudgets, JSON.stringify(categoryBudgets));
+  }, [categoryBudgets]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.savingsGoals, JSON.stringify(savingsGoals));
+  }, [savingsGoals]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.lockdown, String(lockdownActive));
   }, [lockdownActive]);
 
@@ -545,8 +686,29 @@ export function App() {
   }, [themeId]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.pro, String(isProActive));
-  }, [isProActive]);
+    let cancelled = false;
+    const syncSubscription = async () => {
+      try {
+        const token = await getCurrentUserIdToken();
+        if (!token) {
+          if (!cancelled) setIsProActive(false);
+          return;
+        }
+        const response = await fetch("/api/billing/status", { headers: { Authorization: "Bearer " + token } });
+        if (!response.ok) return;
+        const result = await response.json() as { active?: boolean };
+        if (!cancelled) setIsProActive(result.active === true);
+      } catch {
+        // Network failures must never grant Pro access.
+      }
+    };
+    void syncSubscription();
+    const intervalId = window.setInterval(() => void syncSubscription(), 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.autoLockdown, String(autoLockdownAt90));
@@ -608,7 +770,7 @@ export function App() {
     };
   }, []);
 
-  const baseTheme = FAN_THEMES[themeId];
+  const baseTheme = FAN_THEMES[themeId] ?? FAN_THEMES[DEFAULT_THEME_ID];
   const theme = useMemo(() => {
     if (!customThemeOverride) return baseTheme;
     const hex = customThemeOverride.primaryHex;
@@ -627,13 +789,35 @@ export function App() {
     };
   }, [baseTheme, customThemeOverride]);
 
-  // Calculate Today's Spend (Expense records only)
+  // Calculate Today's Spend (Expense records only - strictly excluding income)
   const todaySpent = useMemo(() => {
     const todayStr = now.toDateString();
     return expenses
-      .filter((e) => e.type !== "income" && new Date(e.timestamp).toDateString() === todayStr)
+      .filter(
+        (e) =>
+          e.type !== "income" &&
+          !INCOME_ONLY_CATEGORIES.includes(e.category) &&
+          new Date(e.timestamp).toDateString() === todayStr
+      )
       .reduce((sum, e) => sum + e.amount, 0);
   }, [expenses, now]);
+
+  const currentMonthSpent = useMemo(() => {
+    const curM = now.getMonth();
+    const curY = now.getFullYear();
+    return expenses
+      .filter((e) => {
+        if (e.type === "income" || INCOME_ONLY_CATEGORIES.includes(e.category)) return false;
+        const d = new Date(e.timestamp);
+        return d.getMonth() === curM && d.getFullYear() === curY;
+      })
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [expenses, now]);
+
+  const currentMonthlyBudget = useMemo(() => {
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() || 30;
+    return dailyLimit * daysInMonth;
+  }, [dailyLimit, now]);
 
   // Calculate Dynamic Discipline Streak (Expense records only)
   const streakDays = useMemo(() => {
@@ -643,7 +827,12 @@ export function App() {
       checkDate.setDate(now.getDate() - i);
       const dayStr = checkDate.toDateString();
       const dayTotal = expenses
-        .filter((e) => e.type !== "income" && new Date(e.timestamp).toDateString() === dayStr)
+        .filter(
+          (e) =>
+            e.type !== "income" &&
+            !INCOME_ONLY_CATEGORIES.includes(e.category) &&
+            new Date(e.timestamp).toDateString() === dayStr
+        )
         .reduce((sum, e) => sum + e.amount, 0);
 
       if (dayTotal <= dailyLimit) {
@@ -794,7 +983,7 @@ export function App() {
 
   const handleTourComplete = () => {
     setIsTourActive(false);
-    // Prompt CRED PRO Trial Teaser right after tour completion
+    // Offer Pro subscription plans after onboarding
     setIsProTeaserOpen(true);
   };
 
@@ -804,17 +993,164 @@ export function App() {
   };
 
   const handleClaimProTrial = () => {
-    const expiresAt = Date.now() + 72 * 60 * 60 * 1000;
-    setIsProActive(true);
-    localStorage.setItem(STORAGE_KEYS.pro, "true");
-    localStorage.setItem("kharche_pro_trial_v1", "claimed");
-    localStorage.setItem("kharche_pro_trial_expires_at_v1", String(expiresAt));
     setIsProTeaserOpen(false);
-    showToast("🎉 3-Day PRO Black Trial Activated (72h)! All themes & AI uncapped");
+    setActiveTab("pro");
+    showToast("Choose a Pro plan to continue to secure checkout.");
+  };
+
+  const handlePurchasePro = async (plan: "monthly" | "quarterly"): Promise<void> => {
+    const token = await getCurrentUserIdToken();
+    if (!token) throw new Error("Please sign in again before purchasing Pro.");
+    const createResponse = await fetch("/api/billing/subscription", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ plan }),
+    });
+    const checkout = await createResponse.json() as { keyId?: string; subscriptionId?: string; label?: string; error?: string };
+    if (!createResponse.ok || !checkout.keyId || !checkout.subscriptionId) {
+      throw new Error(checkout.error || "Could not start secure checkout.");
+    }
+    await loadRazorpayCheckout();
+    const RazorpayConstructor = window.Razorpay;
+    if (!RazorpayConstructor) throw new Error("Secure checkout is unavailable.");
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      const razorpay = new RazorpayConstructor({
+        key: checkout.keyId!,
+        subscription_id: checkout.subscriptionId!,
+        name: "Kharchee Pro",
+        description: checkout.label || "Kharchee Pro subscription",
+        theme: { color: "#cbd5e1" },
+        modal: { ondismiss: () => fail(new Error("Checkout closed. No Pro access was granted.")) },
+        handler: async (payment) => {
+          try {
+            const verifyResponse = await fetch("/api/billing/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+              body: JSON.stringify(payment),
+            });
+            const verified = await verifyResponse.json() as { active?: boolean; error?: string };
+            if (!verifyResponse.ok || verified.active !== true) throw new Error(verified.error || "Payment is not verified yet.");
+            if (settled) return;
+            settled = true;
+            setIsProActive(true);
+            showToast("Kharchee Pro is active — payment verified by the server.");
+            resolve();
+          } catch (error) {
+            fail(error instanceof Error ? error : new Error("Payment verification failed."));
+          }
+        },
+      });
+      razorpay.on("payment.failed", (failure) => fail(new Error(failure.error?.description || "Payment failed. No Pro access was granted.")));
+      razorpay.open();
+    });
+  };
+
+  const handleCancelPro = async (): Promise<void> => {
+    const token = await getCurrentUserIdToken();
+    if (!token) throw new Error("Please sign in again to manage your subscription.");
+    const response = await fetch("/api/billing/cancel", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token },
+    });
+    const result = await response.json() as { cancelled?: boolean; active?: boolean; currentPeriodEnd?: number | null; error?: string };
+    if (!response.ok || result.cancelled !== true) throw new Error(result.error || "Could not cancel auto-renewal.");
+    setIsProActive(result.active === true);
+    showToast(result.active
+      ? "Auto-renewal cancelled. Pro remains active until the current paid period ends."
+      : "Pro subscription cancelled.");
   };
 
   const handleReplayTour = () => {
     setIsOnboardingOpen(true);
+  };
+
+  const handleUpdateCategoryBudget = (category: ExpenseCategory, limit: number) => {
+    if (INCOME_ONLY_CATEGORIES.includes(category)) return;
+    playQuickAddChirp();
+    setCategoryBudgets((prev) => ({
+      ...prev,
+      [category]: Math.max(0, Math.round(limit)),
+    }));
+    showToast(
+      limit > 0
+        ? `Set ${category} monthly budget to ₹${Math.round(limit).toLocaleString("en-IN")}`
+        : `Cleared monthly budget for ${category}`
+    );
+  };
+
+  const handleAddSavingsGoal = (data: {
+    title: string;
+    targetAmount: number;
+    savedAmount: number;
+    deadline?: string;
+  }) => {
+    playQuickAddChirp();
+    const newGoal: SavingsGoal = {
+      id: `goal-${Date.now()}`,
+      title: data.title,
+      targetAmount: data.targetAmount,
+      savedAmount: data.savedAmount,
+      deadline: data.deadline,
+      createdAt: new Date().toISOString(),
+    };
+    setSavingsGoals((prev) => [newGoal, ...prev]);
+    showToast(`🎯 Created savings goal: "${data.title}" (Target ₹${data.targetAmount.toLocaleString("en-IN")})`);
+  };
+
+  const handleUpdateSavingsGoal = (goalId: string, savedAmount: number) => {
+    playMetallicCoinChime();
+    setSavingsGoals((prev) =>
+      prev.map((g) =>
+        g.id === goalId ? { ...g, savedAmount: Math.max(0, Math.round(savedAmount)) } : g
+      )
+    );
+    showToast(`💰 Updated savings goal progress to ₹${Math.round(savedAmount).toLocaleString("en-IN")}`);
+  };
+
+  const handleDeleteSavingsGoal = (goalId: string) => {
+    setSavingsGoals((prev) => prev.filter((g) => g.id !== goalId));
+    showToast("Removed savings goal");
+  };
+
+  const checkCategoryBudgetThreshold = (
+    category: ExpenseCategory,
+    addedAmount: number,
+    txTimestamp: string
+  ) => {
+    const catLimit = categoryBudgets[category] || 0;
+    if (catLimit <= 0 || INCOME_ONLY_CATEGORIES.includes(category)) return;
+
+    const txDate = new Date(txTimestamp);
+    const curM = txDate.getMonth();
+    const curY = txDate.getFullYear();
+
+    const prevCatMonthSpent = expenses
+      .filter((e) => {
+        if (e.type === "income" || INCOME_ONLY_CATEGORIES.includes(e.category)) return false;
+        const d = new Date(e.timestamp);
+        return e.category === category && d.getMonth() === curM && d.getFullYear() === curY;
+      })
+      .reduce((s, e) => s + e.amount, 0);
+
+    const nextCatMonthSpent = prevCatMonthSpent + addedAmount;
+    const prevRatio = prevCatMonthSpent / catLimit;
+    const nextRatio = nextCatMonthSpent / catLimit;
+
+    if (prevRatio < 1.0 && nextRatio >= 1.0) {
+      showToast(
+        `🚨 ${category} monthly budget exceeded! (₹${nextCatMonthSpent.toLocaleString("en-IN")} / ₹${catLimit.toLocaleString("en-IN")})`
+      );
+    } else if (prevRatio < 0.8 && nextRatio >= 0.8) {
+      showToast(
+        `⚠️ Approaching ${category} monthly limit: ${Math.round(nextRatio * 100)}% used (₹${nextCatMonthSpent.toLocaleString("en-IN")} / ₹${catLimit.toLocaleString("en-IN")})`
+      );
+    }
   };
 
   const handleAddExpense = (data: {
@@ -824,13 +1160,31 @@ export function App() {
     paymentMode: PaymentMode;
     type?: "expense" | "income";
     note?: string;
+    timestamp?: string;
   }) => {
-    const txType = data.type === "income" ? "income" : "expense";
+    const txType =
+      data.type === "income" || INCOME_ONLY_CATEGORIES.includes(data.category)
+        ? "income"
+        : "expense";
+    const safeCategory: ExpenseCategory =
+      txType === "income"
+        ? INCOME_ONLY_CATEGORIES.includes(data.category)
+          ? data.category
+          : "Salary"
+        : EXPENSE_ONLY_CATEGORIES.includes(data.category)
+        ? data.category
+        : "Food";
+
+    const finalTimestamp =
+      data.timestamp && !Number.isNaN(Date.parse(data.timestamp))
+        ? data.timestamp
+        : new Date().toISOString();
+
     const currentHour = new Date().getHours();
     const isMidnightCraving =
       txType === "expense" &&
       (currentHour >= 22 || currentHour < 4) &&
-      (data.category === "Food" || data.category === "Chai & Snacks");
+      (safeCategory === "Food" || safeCategory === "Chai & Snacks");
 
     if (isMidnightCraving) {
       playMidnightCravingsChime();
@@ -842,12 +1196,12 @@ export function App() {
     const newExp: Expense = {
       id: `${txType === "income" ? "inc" : "exp"}-${Date.now()}`,
       title: data.title,
-      category: data.category,
+      category: safeCategory,
       amount: data.amount,
       paymentMode: data.paymentMode,
       type: txType,
       note: data.note,
-      timestamp: new Date().toISOString(),
+      timestamp: finalTimestamp,
     };
     setExpenses((prev) => [newExp, ...prev]);
 
@@ -856,37 +1210,110 @@ export function App() {
       return;
     }
 
-    const nextToday = todaySpent + data.amount;
-    checkAutoLockdown(nextToday);
-    checkBudgetThresholdAlerts(todaySpent, nextToday);
+    const isTodayTx = new Date(finalTimestamp).toDateString() === now.toDateString();
+    if (isTodayTx) {
+      const nextToday = todaySpent + data.amount;
+      checkAutoLockdown(nextToday);
+      checkBudgetThresholdAlerts(todaySpent, nextToday);
+    }
+    checkCategoryBudgetThreshold(safeCategory, data.amount, finalTimestamp);
+
     if (isMidnightCraving) {
       showToast(
-        `🌙 Midnight Impulse Alert! Late-night ${data.category} (−₹${data.amount}) leaks daily budgets!`
+        `🌙 Midnight Impulse Alert! Late-night ${safeCategory} (−₹${data.amount}) leaks daily budgets!`
       );
     } else {
       showToast(`Logged −₹${data.amount.toLocaleString("en-IN")} for ${data.title}`);
+    }
+
+    // Evaluate real-time spending accountability against actual budget
+    if (upiSettings.monitoringEnabled && isTodayTx) {
+      const evaluation = evaluateSpendingAccountability({
+        amount: data.amount,
+        merchant: data.title,
+        category: safeCategory,
+        existingExpenses: expenses,
+        dailyLimit,
+        categoryBudgets,
+        settings: upiSettings,
+        now,
+        alreadyIncludedInExpenses: false,
+      });
+
+      if (evaluation.shouldWarn) {
+        const alertRec: AccountabilityAlertRecord = {
+          id: `alert-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          source: "app_expense_entry",
+          appName: data.paymentMode === "UPI" ? "Kharchee UPI Entry" : "Kharchee Expense",
+          fingerprint: buildTransactionFingerprint({
+            amount: data.amount,
+            merchant: data.title,
+            windowMinutes: upiSettings.dedupWindowMinutes,
+          }),
+          linkedExpenseId: newExp.id,
+          evaluation,
+        };
+        setActiveAccountabilityAlert(alertRec);
+        setUpiAlertHistory((prev) => {
+          const next = [alertRec, ...prev].slice(0, 40);
+          saveAlertHistory(next);
+          return next;
+        });
+        if (notificationsEnabled) {
+          sendKharcheNotification(
+            evaluation.headline,
+            evaluation.message,
+            evaluation.urgency === "breach" ? "breach" : "warning"
+          );
+        }
+      }
     }
   };
 
   const handleUpdateExpense = (updated: Expense) => {
     playQuickAddChirp();
-    const nextList = expenses.map((e) => (e.id === updated.id ? updated : e));
+    const txType =
+      updated.type === "income" || INCOME_ONLY_CATEGORIES.includes(updated.category)
+        ? "income"
+        : "expense";
+    const normalizedUpdated: Expense = {
+      ...updated,
+      type: txType,
+      category:
+        txType === "income"
+          ? INCOME_ONLY_CATEGORIES.includes(updated.category)
+            ? updated.category
+            : "Salary"
+          : EXPENSE_ONLY_CATEGORIES.includes(updated.category)
+          ? updated.category
+          : "Food",
+    };
+
+    const nextList = expenses.map((e) =>
+      e.id === normalizedUpdated.id ? normalizedUpdated : e
+    );
     setExpenses(nextList);
     setEditingExpense(null);
 
-    if (updated.type !== "income") {
+    if (normalizedUpdated.type !== "income") {
       const todayStr = now.toDateString();
       const nextToday = nextList
-        .filter((e) => e.type !== "income" && new Date(e.timestamp).toDateString() === todayStr)
+        .filter(
+          (e) =>
+            e.type !== "income" &&
+            !INCOME_ONLY_CATEGORIES.includes(e.category) &&
+            new Date(e.timestamp).toDateString() === todayStr
+        )
         .reduce((sum, e) => sum + e.amount, 0);
       checkAutoLockdown(nextToday);
       checkBudgetThresholdAlerts(todaySpent, nextToday);
     }
 
     showToast(
-      `Updated ${updated.title} (${
-        updated.type === "income" ? "+" : "−"
-      }₹${updated.amount.toLocaleString("en-IN")})`
+      `Updated ${normalizedUpdated.title} (${
+        normalizedUpdated.type === "income" ? "+" : "−"
+      }₹${normalizedUpdated.amount.toLocaleString("en-IN")})`
     );
   };
 
@@ -972,6 +1399,170 @@ export function App() {
     setExpenses((prev) => [restored, ...prev]);
     setToast(null);
   };
+
+  const handleUpdateUpiSettings = (nextSettings: UpiAccountabilitySettings) => {
+    setUpiSettings(nextSettings);
+    saveAccountabilitySettings(nextSettings);
+  };
+
+  const handleMarkFalseDetection = (alertId: string, linkedExpenseId?: string) => {
+    if (linkedExpenseId) {
+      setExpenses((prev) => prev.filter((e) => e.id !== linkedExpenseId));
+    }
+    setUpiAlertHistory((prev) => {
+      const next = prev.map((a) =>
+        a.id === alertId ? { ...a, markedFalseDetection: true, dismissed: true } : a
+      );
+      saveAlertHistory(next);
+      return next;
+    });
+    if (activeAccountabilityAlert?.id === alertId) {
+      setActiveAccountabilityAlert(null);
+    }
+    showToast("Removed false detection and restored your remaining budget.");
+  };
+
+  const handleEditDetectedExpenseById = (expenseId: string) => {
+    const found = expenses.find((e) => e.id === expenseId);
+    if (!found) {
+      showToast("Transaction record not found");
+      return;
+    }
+    handleEditTransaction(found);
+  };
+
+  const handleProcessUpiNotificationPayload = (params: {
+    title?: string;
+    text: string;
+    packageName: string;
+    timestampIso?: string;
+    source: "android_notification_listener" | "manual_parser_test";
+  }): { status: "accepted" | "duplicate" | "rejected"; message: string } => {
+    if (
+      params.source === "android_notification_listener" &&
+      (!upiSettings.monitoringEnabled || !upiSettings.userConsentGranted)
+    ) {
+      return {
+        status: "rejected",
+        message: "UPI Notification Monitoring is disabled or awaiting user consent.",
+      };
+    }
+
+    const parseResult = parseUpiPaymentNotification({
+      title: params.title,
+      text: params.text,
+      packageName: params.packageName,
+      timestampIso: params.timestampIso,
+      dedupWindowMinutes: upiSettings.dedupWindowMinutes,
+      allowManualTestPackage: params.source === "manual_parser_test",
+    });
+
+    if (parseResult.rejected) {
+      return {
+        status: "rejected",
+        message: `${parseResult.explanation}`,
+      };
+    }
+
+    const { parsed } = parseResult;
+    if (isDuplicateFingerprint(parsed.fingerprint, upiSettings.dedupWindowMinutes)) {
+      return {
+        status: "duplicate",
+        message: `Duplicate notification suppressed (already processed '${parsed.sanitizedSummary}' within ${upiSettings.dedupWindowMinutes} min).`,
+      };
+    }
+
+    recordFingerprintSeen(parsed.fingerprint, upiSettings.dedupWindowMinutes);
+
+    const evaluation = evaluateSpendingAccountability({
+      amount: parsed.amount,
+      merchant: parsed.merchant,
+      category: parsed.category,
+      existingExpenses: expenses,
+      dailyLimit,
+      categoryBudgets,
+      settings: upiSettings,
+      now: new Date(),
+      alreadyIncludedInExpenses: false,
+    });
+
+    let createdExpenseId: string | undefined;
+    if (upiSettings.autoLogDetectedPayments) {
+      const newExp: Expense = {
+        id: `exp-upi-${Date.now()}`,
+        title: parsed.merchant,
+        category: parsed.category,
+        amount: parsed.amount,
+        paymentMode: "UPI",
+        type: "expense",
+        note: `Detected from ${parsed.appName} notification${
+          parsed.upiRef ? ` (Ref ${parsed.upiRef})` : ""
+        }`,
+        timestamp: parsed.timestampIso,
+      };
+      createdExpenseId = newExp.id;
+      setExpenses((prev) => [newExp, ...prev]);
+      checkAutoLockdown(evaluation.todaySpentAfter);
+    }
+
+    const alertRecord: AccountabilityAlertRecord = {
+      id: `upi-alert-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      source: params.source,
+      appName: parsed.appName,
+      fingerprint: parsed.fingerprint,
+      linkedExpenseId: createdExpenseId,
+      evaluation,
+    };
+
+    setActiveAccountabilityAlert(alertRecord);
+    setUpiAlertHistory((prev) => {
+      const next = [alertRecord, ...prev].slice(0, 40);
+      saveAlertHistory(next);
+      return next;
+    });
+
+    if (evaluation.shouldWarn && notificationsEnabled) {
+      sendKharcheNotification(
+        evaluation.headline,
+        evaluation.message,
+        evaluation.urgency === "breach" ? "breach" : "warning"
+      );
+    } else {
+      playQuickAddChirp();
+    }
+
+    return {
+      status: "accepted",
+      message: `${evaluation.headline} — ${evaluation.message}`,
+    };
+  };
+
+  // Native Android NotificationListenerService WebView event bridge listener
+  useEffect(() => {
+    const onNativeUpiNotification = (event: Event) => {
+      const custom = event as CustomEvent<{
+        packageName?: string;
+        title?: string;
+        text?: string;
+        timestampIso?: string;
+      }>;
+      const detail = custom.detail;
+      if (!detail || typeof detail.text !== "string") return;
+      handleProcessUpiNotificationPayload({
+        packageName: detail.packageName || "",
+        title: detail.title,
+        text: detail.text,
+        timestampIso: detail.timestampIso,
+        source: "android_notification_listener",
+      });
+    };
+
+    window.addEventListener("kharchee:upi-notification", onNativeUpiNotification);
+    return () => {
+      window.removeEventListener("kharchee:upi-notification", onNativeUpiNotification);
+    };
+  });
 
   const handleResetAllExpenses = () => {
     setExpenses([]);
@@ -1137,17 +1728,17 @@ export function App() {
   const handleExportBackup = () => {
     playQuickAddChirp();
     const backupPayload = {
-      version: "1.0",
+      version: "1.1",
       exportedAt: new Date().toISOString(),
       dailyLimit,
       myUpiId,
       themeId,
-      isProActive,
-      proUtr: localStorage.getItem("kharche_pro_utr_v1") || "",
       lockdownActive,
       autoLockdownAt90,
       unlockedBadgeIds,
       pinnedBadgeIds,
+      categoryBudgets,
+      savingsGoals,
       expenses,
       khataFriends,
     };
@@ -1184,6 +1775,8 @@ export function App() {
           autoLockdownAt90: boolean;
           unlockedBadgeIds: string[];
           pinnedBadgeIds: string[];
+          categoryBudgets: CategoryBudgets;
+          savingsGoals: SavingsGoal[];
           expenses: unknown[];
           khataFriends: KhataFriend[];
         }>;
@@ -1209,6 +1802,34 @@ export function App() {
           setKhataFriends(validatedFriends);
           localStorage.setItem(STORAGE_KEYS.khata, JSON.stringify(validatedFriends));
         }
+        if (parsed.categoryBudgets && typeof parsed.categoryBudgets === "object") {
+          const cleanBudgets: CategoryBudgets = {};
+          for (const cat of EXPENSE_ONLY_CATEGORIES) {
+            const val = Number((parsed.categoryBudgets as Record<string, unknown>)[cat]);
+            if (Number.isFinite(val) && val >= 0 && val <= 10000000) {
+              cleanBudgets[cat] = Math.round(val);
+            }
+          }
+          setCategoryBudgets(cleanBudgets);
+          localStorage.setItem(STORAGE_KEYS.categoryBudgets, JSON.stringify(cleanBudgets));
+        }
+        if (Array.isArray(parsed.savingsGoals)) {
+          const cleanGoals = parsed.savingsGoals.filter(
+            (g): g is SavingsGoal =>
+              Boolean(
+                g &&
+                  typeof g === "object" &&
+                  typeof g.id === "string" &&
+                  typeof g.title === "string" &&
+                  typeof g.targetAmount === "number" &&
+                  g.targetAmount > 0 &&
+                  typeof g.savedAmount === "number" &&
+                  g.savedAmount >= 0
+              )
+          );
+          setSavingsGoals(cleanGoals);
+          localStorage.setItem(STORAGE_KEYS.savingsGoals, JSON.stringify(cleanGoals));
+        }
         if (
           typeof parsed.dailyLimit === "number" &&
           Number.isFinite(parsed.dailyLimit) &&
@@ -1218,9 +1839,10 @@ export function App() {
           setDailyLimit(Math.round(parsed.dailyLimit));
           localStorage.setItem(STORAGE_KEYS.dailyLimit, String(Math.round(parsed.dailyLimit)));
         }
-        if (typeof parsed.themeId === "string" && parsed.themeId in FAN_THEMES) {
-          setThemeId(parsed.themeId as ThemeId);
-          localStorage.setItem(STORAGE_KEYS.theme, parsed.themeId);
+        if (typeof parsed.themeId === "string") {
+          const safeImportedTheme = getSafeThemeId(parsed.themeId);
+          setThemeId(safeImportedTheme);
+          localStorage.setItem(STORAGE_KEYS.theme, safeImportedTheme);
         }
         if (typeof parsed.lockdownActive === "boolean") {
           setLockdownActive(parsed.lockdownActive);
@@ -1234,18 +1856,7 @@ export function App() {
           setMyUpiId(parsed.myUpiId.trim());
           localStorage.setItem("kharche_my_upi_id_v1", parsed.myUpiId.trim());
         }
-        const cleanedBackupUtr =
-          typeof parsed.proUtr === "string" ? parsed.proUtr.trim() : "";
-        if (/^\d{12}$/.test(cleanedBackupUtr)) {
-          localStorage.setItem("kharche_pro_submitted_utr_v1", cleanedBackupUtr);
-        }
-        // Pro access is strictly tied to valid trial period, not unverified UTR strings
-        const trialExpiresAtRaw = localStorage.getItem("kharche_pro_trial_expires_at_v1");
-        const isTrialValid =
-          localStorage.getItem("kharche_pro_trial_v1") === "claimed" &&
-          Number(trialExpiresAtRaw || 0) > Date.now();
-        setIsProActive(isTrialValid);
-        localStorage.setItem(STORAGE_KEYS.pro, String(isTrialValid));
+        // Premium access is server-authoritative; backup files cannot unlock paid Pro.
         if (Array.isArray(parsed.unlockedBadgeIds)) {
           const cleanUnlocked = parsed.unlockedBadgeIds.filter(
             (id): id is string => typeof id === "string"
@@ -1293,6 +1904,8 @@ export function App() {
         setIsJarvisOpen(false);
       } else if (isRewardVaultOpen) {
         setIsRewardVaultOpen(false);
+      } else if (isUpiGuardModalOpen) {
+        setIsUpiGuardModalOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -1304,6 +1917,7 @@ export function App() {
     isProfileOpen,
     isJarvisOpen,
     isRewardVaultOpen,
+    isUpiGuardModalOpen,
   ]);
 
   const navItems: Array<{
@@ -1446,6 +2060,16 @@ export function App() {
             <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-[#0f172a] border border-slate-800 text-[11px] font-medium text-slate-300 font-mono shrink-0">
               {formatLiveHeaderDate(now)}
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsUpiGuardModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/25 transition-colors text-[11px] font-semibold shrink-0 cursor-pointer"
+              title="UPI Spending Accountability & Android Notification Access Settings"
+            >
+              <Shield className="w-3 h-3 text-indigo-400" />
+              <span>UPI Spending Guard</span>
+            </button>
 
             <button
               type="button"
@@ -1616,6 +2240,15 @@ export function App() {
           </aside>
         )}
 
+        {/* Real-Time Spending Accountability Alert Banner (Post-Payment Notification & Budget Guard) */}
+        <AccountabilityAlertBanner
+          alert={activeAccountabilityAlert}
+          onDismiss={() => setActiveAccountabilityAlert(null)}
+          onEditDetectedExpense={handleEditDetectedExpenseById}
+          onMarkFalseDetection={handleMarkFalseDetection}
+          onOpenSettings={() => setIsUpiGuardModalOpen(true)}
+        />
+
         {/* Scrollable Body Content — Responsive SaaS Container */}
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 pb-28 md:pb-12 relative z-10 max-w-5xl w-full mx-auto space-y-6">
           {activeTab === "home" && (
@@ -1629,7 +2262,13 @@ export function App() {
                 expenses={expenses}
                 streakDays={streakDays}
                 stealthMode={stealthMode}
+                categoryBudgets={categoryBudgets}
+                savingsGoals={savingsGoals}
                 onUpdateLimit={setDailyLimit}
+                onUpdateCategoryBudget={handleUpdateCategoryBudget}
+                onAddSavingsGoal={handleAddSavingsGoal}
+                onUpdateSavingsGoal={handleUpdateSavingsGoal}
+                onDeleteSavingsGoal={handleDeleteSavingsGoal}
                 onToggleLockdown={() => {
                   const next = !lockdownActive;
                   if (next) {
@@ -1720,11 +2359,11 @@ export function App() {
                 )}
               </section>
 
-              {/* FAN-ZONE THEMES */}
-              <section id="tour-themes-bar" aria-label="Fan-Zone Themes" className="space-y-3 pt-2">
+              {/* LUXURY TECH THEMES */}
+              <section id="tour-themes-bar" aria-label="Luxury Tech Themes" className="space-y-3 pt-2">
                 <div className="flex items-center justify-between px-1">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Accent &amp; Club Themes
+                    Luxury Tech Themes
                   </span>
                   <button
                     type="button"
@@ -1738,7 +2377,7 @@ export function App() {
                   currentTheme={themeId}
                   onSelectTheme={(id) => {
                     playQuickAddChirp();
-                    setThemeId(id);
+                    setThemeId(getSafeThemeId(id));
                   }}
                 />
               </section>
@@ -1806,15 +2445,8 @@ export function App() {
               onApplyCustomTheme={(custom) => {
                 setCustomThemeOverride(custom);
               }}
-              onTogglePro={() => {
-                const next = !isProActive;
-                setIsProActive(next);
-                showToast(
-                  next
-                    ? "👑 KHARCHE PRO Black Edition Vault Unlocked"
-                    : "Standard Tier Active"
-                );
-              }}
+              onPurchasePro={handlePurchasePro}
+              onCancelPro={handleCancelPro}
               onToggleAutoLockdown={() => setAutoLockdownAt90((v) => !v)}
               onToggleNotifications={handleToggleNotifications}
               onSendTestNotification={handleSendTestNotification}
@@ -1862,11 +2494,11 @@ export function App() {
           </div>
         </button>
 
-        {/* FEATURE 5: "BIOMETRIC HUD SCANNER ON BOOT" (1.5s Cyan Thumbprint Laser-Scan) */}
+        {/* FEATURE 5: "BIOMETRIC HUD SCANNER ON BOOT" (Demo Visual Boot Animation) */}
         {isBiometricScanning && (
           <div
             role="status"
-            aria-label="Biometric HUD Scanner Active"
+            aria-label="Biometric HUD Demo Animation Active"
             onClick={() => setIsBiometricScanning(false)}
             className="fixed inset-0 z-50 bg-[#0b0f17]/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 select-none cursor-pointer animate-in fade-in duration-150"
           >
@@ -1876,15 +2508,15 @@ export function App() {
               <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_20px_#00f0ff] animate-bounce" />
             </div>
 
-            <div className="mt-5 text-center space-y-1">
-              <span className="inline-block text-[10px] font-mono font-black uppercase tracking-[0.28em] text-cyan-300">
-                STARK BIOMETRIC HUD SCANNER
+            <div className="mt-5 text-center space-y-1.5 max-w-xs">
+              <span className="inline-block text-[10px] font-mono font-black uppercase tracking-[0.2em] text-amber-300 px-2 py-0.5 rounded bg-amber-500/15 border border-amber-400/30">
+                DEMO BOOT ANIMATION · OFFLINE LOCAL PROFILE
               </span>
               <p className="text-sm font-black text-white tracking-wider uppercase">
-                Verifying Sovereign Thumbprint...
+                Loading Offline Local Profile...
               </p>
-              <p className="text-[11px] font-mono text-cyan-200/80">
-                IDENTITY CONFIRMED: MRIGANDER SINGH
+              <p className="text-[11px] font-mono text-slate-400">
+                Simulated visual effect · Cloud sync &amp; hardware biometric auth require backend configuration
               </p>
             </div>
           </div>
@@ -2009,6 +2641,8 @@ export function App() {
           disciplineScore={disciplineScore}
           expenses={expenses}
           friends={khataFriends}
+          categoryBudgets={categoryBudgets}
+          savingsGoals={savingsGoals}
           theme={theme}
           onAddExpense={(title, amount, category) => {
             handleAddExpense({
@@ -2129,16 +2763,44 @@ export function App() {
           }}
           onResetExpenses={handleResetAllExpenses}
           onTogglePro={() => {
-            const next = !isProActive;
-            setIsProActive(next);
-            localStorage.setItem(STORAGE_KEYS.pro, String(next));
-            showToast(next ? "KHARCHE PRO Black Active" : "Standard Tier");
+            setIsProfileOpen(false);
+            setActiveTab("pro");
+            showToast("Choose a Pro plan to continue to secure checkout.");
           }}
           onShowToast={showToast}
           onReplayTour={handleReplayTour}
           onOpenRewardVault={() => setIsRewardVaultOpen(true)}
+          onOpenUpiGuard={() => setIsUpiGuardModalOpen(true)}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+        />
+
+        {/* UPI Spending Accountability & Android Notification Access Modal */}
+        <UpiAccountabilityModal
+          isOpen={isUpiGuardModalOpen}
+          theme={theme}
+          settings={upiSettings}
+          alertHistory={upiAlertHistory}
+          dailyLimit={dailyLimit}
+          todaySpent={todaySpent}
+          monthlyBudget={currentMonthlyBudget}
+          monthSpent={currentMonthSpent}
+          notificationsEnabled={notificationsEnabled}
+          notificationPermission={notificationPermission}
+          onClose={() => setIsUpiGuardModalOpen(false)}
+          onUpdateSettings={handleUpdateUpiSettings}
+          onRequestBrowserNotificationPermission={() => void handleToggleNotifications()}
+          onTriggerParsedUpiNotification={(payload) =>
+            handleProcessUpiNotificationPayload(payload)
+          }
+          onEditDetectedExpense={handleEditDetectedExpenseById}
+          onMarkFalseDetection={handleMarkFalseDetection}
+          onClearAlertHistory={() => {
+            setUpiAlertHistory([]);
+            saveAlertHistory([]);
+            setActiveAccountabilityAlert(null);
+            showToast("Cleared UPI alert history log");
+          }}
         />
 
         {/* Stark Reward Vault (Daily Discipline Cyber Roulette Wheel) */}
@@ -2184,7 +2846,7 @@ export function App() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Select Fan-Zone Theme"
+            aria-label="Select HUD Theme"
             onClick={() => setIsThemeModalOpen(false)}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
           >
@@ -2195,10 +2857,10 @@ export function App() {
               <div className="flex items-center justify-between px-1">
                 <div>
                   <h3 className="text-sm font-bold tracking-wider uppercase text-white">
-                    Select Accent / Club Theme
+                    Select Luxury Tech Theme
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Choose your preferred dashboard accent theme
+                    Choose your preferred dashboard HUD theme
                   </p>
                 </div>
                 <button
@@ -2214,7 +2876,7 @@ export function App() {
                 currentTheme={themeId}
                 onSelectTheme={(id) => {
                   playQuickAddChirp();
-                  setThemeId(id);
+                  setThemeId(getSafeThemeId(id));
                   setIsThemeModalOpen(false);
                 }}
               />

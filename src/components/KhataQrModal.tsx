@@ -18,7 +18,7 @@ export const KhataQrModal: React.FC<KhataQrModalProps> = ({
   isOpen,
   onClose,
   myUpiId,
-  recipientName = "Mrigander",
+  recipientName = "Kharche User",
   friendName,
   amount,
   theme,
@@ -28,12 +28,23 @@ export const KhataQrModal: React.FC<KhataQrModalProps> = ({
 
   if (!isOpen) return null;
 
+  const cleanUpi = (myUpiId || "").trim();
+  const hasConfiguredUpi = Boolean(
+    cleanUpi && cleanUpi.includes("@") && cleanUpi.toLowerCase() !== "mrigander@upi"
+  );
+
   const positiveAmount = Math.max(1, Math.round(amount));
-  const upiDeepLink = `upi://pay?pa=${encodeURIComponent(myUpiId)}&pn=${encodeURIComponent(
-    recipientName
-  )}&am=${positiveAmount}&tn=KharcheKhata&cu=INR`;
+  const upiDeepLink = hasConfiguredUpi
+    ? `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(
+        recipientName
+      )}&am=${positiveAmount}&tn=KharcheKhata&cu=INR`
+    : "";
 
   const handleCopyLink = async () => {
+    if (!hasConfiguredUpi) {
+      onShowToast?.("Please configure your UPI ID in Settings / Khata first.");
+      return;
+    }
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(upiDeepLink);
@@ -42,16 +53,17 @@ export const KhataQrModal: React.FC<KhataQrModalProps> = ({
       onShowToast?.(`Copied direct UPI payment link (₹${positiveAmount})`);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      onShowToast?.(`UPI ID: ${myUpiId}`);
+      onShowToast?.(`UPI ID: ${cleanUpi}`);
     }
   };
 
   const handleCopyUpiId = async () => {
+    if (!hasConfiguredUpi) return;
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(myUpiId);
+        await navigator.clipboard.writeText(cleanUpi);
       }
-      onShowToast?.(`Copied UPI ID: ${myUpiId}`);
+      onShowToast?.(`Copied UPI ID: ${cleanUpi}`);
     } catch {}
   };
 
@@ -119,71 +131,97 @@ export const KhataQrModal: React.FC<KhataQrModalProps> = ({
               {positiveAmount.toLocaleString("en-IN")}
             </span>
           </div>
-          <div className="mt-1 flex items-center justify-center gap-1.5 text-[11px] text-slate-300">
-            <span className="font-mono text-cyan-300 font-semibold">{myUpiId}</span>
+          {hasConfiguredUpi ? (
+            <div className="mt-1 flex items-center justify-center gap-1.5 text-[11px] text-slate-300">
+              <span className="font-mono text-cyan-300 font-semibold">{cleanUpi}</span>
+              <button
+                type="button"
+                onClick={handleCopyUpiId}
+                title="Copy UPI ID"
+                className="p-1 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <Copy className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <p className="mt-1 text-[11px] font-mono text-amber-300">
+              Receiving UPI ID not set
+            </p>
+          )}
+        </div>
+
+        {hasConfiguredUpi ? (
+          <>
+            {/* QR Code Canvas with Glowing HUD Frame */}
+            <div className="my-2 flex flex-col items-center justify-center relative z-10">
+              <div
+                className="p-3.5 rounded-2xl bg-white border-2 relative shadow-xl"
+                style={{
+                  borderColor: theme.accentHex,
+                  boxShadow: `0 0 20px ${theme.ringGlow}`,
+                }}
+              >
+                <QRCodeSVG
+                  value={upiDeepLink}
+                  size={180}
+                  level="H"
+                  bgColor="#ffffff"
+                  fgColor="#090d16"
+                />
+              </div>
+
+              <div className="mt-2.5 flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Encodes exact ₹{positiveAmount} amount · Zero commission</span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-3 border-t border-white/10 space-y-2 relative z-10">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="w-full h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-bold text-slate-200 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400">Deep Link Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 text-cyan-400" />
+                    <span>Copy UPI Payment Deep-Link</span>
+                  </>
+                )}
+              </button>
+
+              <a
+                href={upiDeepLink}
+                className={`w-full h-10 rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md transition-all active:scale-98 ${theme.buttonBg} ${theme.buttonText}`}
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>Open in PhonePe / GPay</span>
+              </a>
+            </div>
+          </>
+        ) : (
+          <div className="my-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-center space-y-2 relative z-10">
+            <p className="text-xs font-bold text-amber-300">
+              Configure Your Personal UPI ID First
+            </p>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              To prevent routing payments to a default address, UPI QR codes and payment deep-links are only generated after you enter and save your personal UPI ID in <strong>Settings / Profile</strong> or the <strong>Khata UPI Bar</strong>.
+            </p>
             <button
               type="button"
-              onClick={handleCopyUpiId}
-              title="Copy UPI ID"
-              className="p-1 rounded text-slate-400 hover:text-white transition-colors cursor-pointer"
+              onClick={onClose}
+              className="mt-2 w-full h-9 rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/40 text-xs font-bold text-amber-200 cursor-pointer transition-colors"
             >
-              <Copy className="w-3 h-3" />
+              Got It
             </button>
           </div>
-        </div>
-
-        {/* QR Code Canvas with Glowing HUD Frame */}
-        <div className="my-2 flex flex-col items-center justify-center relative z-10">
-          <div
-            className="p-3.5 rounded-2xl bg-white border-2 relative shadow-xl"
-            style={{
-              borderColor: theme.accentHex,
-              boxShadow: `0 0 20px ${theme.ringGlow}`,
-            }}
-          >
-            <QRCodeSVG
-              value={upiDeepLink}
-              size={180}
-              level="H"
-              bgColor="#ffffff"
-              fgColor="#090d16"
-            />
-          </div>
-
-          <div className="mt-2.5 flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Encodes exact ₹{positiveAmount} amount · Zero commission</span>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="pt-3 border-t border-white/10 space-y-2 relative z-10">
-          <button
-            type="button"
-            onClick={handleCopyLink}
-            className="w-full h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-bold text-slate-200 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
-          >
-            {copied ? (
-              <>
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span className="text-emerald-400">Deep Link Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-4 h-4 text-cyan-400" />
-                <span>Copy UPI Payment Deep-Link</span>
-              </>
-            )}
-          </button>
-
-          <a
-            href={upiDeepLink}
-            className={`w-full h-10 rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md transition-all active:scale-98 ${theme.buttonBg} ${theme.buttonText}`}
-          >
-            <ExternalLink className="w-4 h-4" />
-            <span>Open in PhonePe / GPay</span>
-          </a>
-        </div>
+        )}
       </div>
     </div>
   );

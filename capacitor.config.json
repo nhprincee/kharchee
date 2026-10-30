@@ -1,0 +1,9 @@
+{
+  "appId": "com.kharchee.app",
+  "appName": "Kharchee",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

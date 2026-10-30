@@ -61,7 +61,7 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
         <div className="flex items-center gap-2 mb-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-300 font-mono text-[10px] font-extrabold tracking-wider uppercase shadow-xs">
             <Crown className="w-3.5 h-3.5 text-amber-400" />
-            <span>Welcome Privilege · 3 Days Free (Then ₹39/mo)</span>
+            <span>PRO SUBSCRIPTIONS · FROM ₹30/MO</span>
           </div>
         </div>
 
@@ -106,13 +106,13 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
             </div>
             <div>
               <h4 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                <span>All Fan-Zone Themes &amp; Studio</span>
+                <span>Luxury Tech Themes &amp; Studio</span>
                 <span className="text-[9px] px-1.5 py-0.2 rounded-sm bg-amber-500/20 text-amber-300 font-mono">
                   UNLOCKED
                 </span>
               </h4>
               <p className="text-[11px] text-slate-400 leading-snug mt-0.5">
-                Full access to Avengers Earth's Mightiest, Real Madrid, FC Barcelona, and Arc Core.
+                Full access to Arc Core HUD, Midnight Titanium, Cyberpunk Emerald, Stark Armor, and Custom Theme Studio.
               </p>
             </div>
           </div>
@@ -146,7 +146,7 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
           </div>
         </div>
 
-        {/* Claim Trial Action Button */}
+        {/* Open the real subscription plans */}
         <div className="space-y-2.5">
           <button
             type="button"
@@ -157,7 +157,7 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
             }}
           >
             <Crown className="w-4 h-4 fill-slate-950" />
-            <span>CLAIM 3-DAY FREE TRIAL</span>
+            <span>VIEW PRO SUBSCRIPTION PLANS</span>
             <ArrowRight className="w-4 h-4" />
           </button>
 
@@ -173,7 +173,7 @@ export const ProTrialModal: React.FC<ProTrialModalProps> = ({
         {/* Safety Note */}
         <div className="mt-3 text-center">
           <span className="text-[10px] font-mono text-slate-500">
-            No credit card required · Free 3-day full access pass
+            Secure checkout · Pro unlocks after payment verification
           </span>
         </div>
       </div>

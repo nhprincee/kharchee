@@ -12,7 +12,12 @@ import {
   Share2,
   X,
 } from "lucide-react";
-import type { Expense, ExpenseCategory, FanTheme } from "../types";
+import {
+  INCOME_ONLY_CATEGORIES,
+  type Expense,
+  type ExpenseCategory,
+  type FanTheme,
+} from "../types";
 import { getCategoryIcon } from "./SwipeableExpenseRow";
 import { playProVaultChime, fireConfettiBurst } from "../utils/celebration";
 
@@ -36,6 +41,10 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   Cashback: "#2dd4bf",
 };
 
+function isIncomeTx(e: Expense): boolean {
+  return e.type === "income" || INCOME_ONLY_CATEGORIES.includes(e.category);
+}
+
 export const InsightsView: React.FC<InsightsViewProps> = ({
   expenses,
   dailyLimit,
@@ -48,12 +57,12 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
   const [wrapNotice, setWrapNotice] = useState<string | null>(null);
 
   const expenseOnlyRecords = useMemo(
-    () => expenses.filter((e) => e.type !== "income"),
+    () => expenses.filter((e) => !isIncomeTx(e)),
     [expenses]
   );
 
   const incomeOnlyRecords = useMemo(
-    () => expenses.filter((e) => e.type === "income"),
+    () => expenses.filter((e) => isIncomeTx(e)),
     [expenses]
   );
 

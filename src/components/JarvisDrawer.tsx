@@ -10,7 +10,16 @@ import {
   Mic,
   MicOff,
 } from "lucide-react";
-import type { Expense, FanTheme, JarvisMessage, KhataFriend } from "../types";
+import {
+  EXPENSE_ONLY_CATEGORIES,
+  INCOME_ONLY_CATEGORIES,
+  type CategoryBudgets,
+  type Expense,
+  type FanTheme,
+  type JarvisMessage,
+  type KhataFriend,
+  type SavingsGoal,
+} from "../types";
 import { formatTimeShort } from "./SwipeableExpenseRow";
 import { playArmorBootSound } from "../utils/celebration";
 
@@ -25,6 +34,8 @@ interface JarvisDrawerProps {
   disciplineScore?: number;
   expenses?: Expense[];
   friends?: KhataFriend[];
+  categoryBudgets?: CategoryBudgets;
+  savingsGoals?: SavingsGoal[];
   theme?: FanTheme;
   onAddExpense?: (title: string, amount: number, category: string) => void;
   onToggleLockdown?: (active: boolean) => void;
@@ -33,12 +44,12 @@ interface JarvisDrawerProps {
 }
 
 const QUICK_QUESTION_CHIPS = [
+  { label: "Monthly spending summary", icon: "📊" },
+  { label: "Any unusual expenses?", icon: "🔍" },
+  { label: "Give me saving suggestions", icon: "💡" },
   { label: "Kabir owes me 500 for dinner", icon: "🤝" },
-  { label: "Maine Rohan ko 300 diye", icon: "💸" },
   { label: "Add 150 for diet", icon: "🍗" },
-  { label: "Maine 40 ki chai pee", icon: "☕" },
   { label: "Mera score kaisa hai?", icon: "🛡️" },
-  { label: "Lockdown activate kar do", icon: "🚨" },
 ];
 
 export const HolographicAudioSpectrum: React.FC<{
@@ -92,6 +103,8 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
   disciplineScore = 750,
   expenses = [],
   friends = [],
+  categoryBudgets = {},
+  savingsGoals = [],
   theme,
   onAddExpense,
   onToggleLockdown,
@@ -268,21 +281,88 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
       }
     });
 
+    const isInc = (e: Expense) =>
+      e.type === "income" || INCOME_ONLY_CATEGORIES.includes(e.category);
+
+    const now = new Date();
+    const curMonth = now.getMonth();
+    const curYear = now.getFullYear();
+    const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate() || 30;
+
+    const allIncome = expenses.filter((e) => isInc(e));
+    const allExpenses = expenses.filter((e) => !isInc(e));
+
+    const allTimeIncome = allIncome.reduce((s, e) => s + e.amount, 0);
+    const allTimeExpenses = allExpenses.reduce((s, e) => s + e.amount, 0);
+    const netBalance = allTimeIncome - allTimeExpenses;
+
+    const thisMonthIncomeList = allIncome.filter((e) => {
+      const d = new Date(e.timestamp);
+      return d.getMonth() === curMonth && d.getFullYear() === curYear;
+    });
+    const thisMonthExpenseList = allExpenses.filter((e) => {
+      const d = new Date(e.timestamp);
+      return d.getMonth() === curMonth && d.getFullYear() === curYear;
+    });
+
+    const monthIncome = thisMonthIncomeList.reduce((s, e) => s + e.amount, 0);
+    const monthExpenses = thisMonthExpenseList.reduce((s, e) => s + e.amount, 0);
+    const monthlyBudget = dailyLimit * daysInMonth;
+    const remainingMonthlyBudget = monthlyBudget - monthExpenses;
+
     const catMap: Record<string, number> = {};
-    expenses
-      .filter((e) => e.type !== "income")
-      .slice(0, 12)
-      .forEach((e) => {
-        catMap[e.category] = (catMap[e.category] || 0) + e.amount;
-      });
+    thisMonthExpenseList.forEach((e) => {
+      catMap[e.category] = (catMap[e.category] || 0) + e.amount;
+    });
     const topCategories = Object.entries(catMap)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
+      .slice(0, 4)
       .map(([cat, amt]) => `${cat} (₹${amt})`);
+
+    // Detect unusual / high expenses in current month (> 2x average expense or >= ₹500)
+    const avgExpense =
+      thisMonthExpenseList.length > 0
+        ? monthExpenses / thisMonthExpenseList.length
+        : 250;
+    const unusualThreshold = Math.max(400, Math.round(avgExpense * 1.8));
+    const unusualExpenses = thisMonthExpenseList
+      .filter((e) => e.amount >= unusualThreshold)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 4)
+      .map((e) => `${e.title} (₹${e.amount} in ${e.category})`);
+
+    // Category budget alerts
+    const categoryBudgetAlerts: string[] = [];
+    for (const cat of EXPENSE_ONLY_CATEGORIES) {
+      const lim = categoryBudgets[cat] || 0;
+      const spentInCat = catMap[cat] || 0;
+      if (lim > 0) {
+        const pct = Math.round((spentInCat / lim) * 100);
+        if (pct >= 100) {
+          categoryBudgetAlerts.push(`${cat}: EXCEEDED (₹${spentInCat}/₹${lim}, ${pct}%)`);
+        } else if (pct >= 80) {
+          categoryBudgetAlerts.push(`${cat}: NEAR LIMIT (₹${spentInCat}/₹${lim}, ${pct}%)`);
+        }
+      }
+    }
+
+    const savingsGoalsSummary = savingsGoals.map(
+      (g) =>
+        `${g.title}: ₹${g.savedAmount}/₹${g.targetAmount} (${
+          g.targetAmount > 0 ? Math.round((g.savedAmount / g.targetAmount) * 100) : 0
+        }%)`
+    );
+
+    const recentExpenses = allExpenses.slice(0, 6).map((e) => ({
+      title: e.title,
+      category: e.category,
+      amount: e.amount,
+      timeLabel: formatTimeShort(e.timestamp),
+    }));
 
     const recentTransactions = expenses.slice(0, 6).map(
       (e) =>
-        `${e.title} - ${e.type === "income" ? "+" : "−"}₹${e.amount} (${e.category}, ${formatTimeShort(
+        `${e.title} - ${isInc(e) ? "+" : "−"}₹${e.amount} (${e.category}, ${formatTimeShort(
           e.timestamp
         )})`
     );
@@ -295,19 +375,20 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
       lockdownActive,
       streakDays,
       disciplineScore,
+      themeName: theme?.name || "Stark",
+      monthIncome,
+      monthExpenses,
+      monthlyBudget,
+      remainingMonthlyBudget,
+      allTimeIncome,
+      allTimeExpenses,
+      netBalance,
       topCategories,
+      unusualExpenses,
+      categoryBudgetAlerts,
+      savingsGoalsSummary,
+      recentExpenses,
       recentTransactions,
-      // The backend prompt expects these canonical fields; keep them in sync
-      // so Jarvis can reason over actual transactions and Khata balances.
-      recentExpenses: expenses
-        .filter((e) => e.type !== "income")
-        .slice(0, 12)
-        .map((e) => ({
-          title: e.title,
-          category: e.category,
-          amount: e.amount,
-          timeLabel: formatTimeShort(e.timestamp),
-        })),
       khataToReceive,
       khataToPay,
       khataSummary: {
@@ -485,7 +566,64 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
     }
 
     const q = prompt.toLowerCase();
-    const { dailyLimit: lim, todaySpent: spent, percentUsed: pct } = snapshot;
+    const {
+      dailyLimit: lim,
+      todaySpent: spent,
+      percentUsed: pct,
+      monthIncome,
+      monthExpenses,
+      monthlyBudget,
+      remainingMonthlyBudget,
+      netBalance,
+      topCategories,
+      unusualExpenses,
+      categoryBudgetAlerts,
+      savingsGoalsSummary,
+    } = snapshot;
+
+    if (q.includes("month") || q.includes("summary") || q.includes("spent") || q.includes("spending") || q.includes("kitna kharch")) {
+      const topCatStr =
+        topCategories.length > 0 ? topCategories.join(", ") : "no expense categories recorded yet";
+      return `This month you have spent ₹${monthExpenses.toLocaleString("en-IN")} against your ₹${monthlyBudget.toLocaleString("en-IN")} monthly budget (${
+        remainingMonthlyBudget >= 0
+          ? `₹${remainingMonthlyBudget.toLocaleString("en-IN")} remaining`
+          : `over budget by ₹${Math.abs(remainingMonthlyBudget).toLocaleString("en-IN")}`
+      }), while earning +₹${monthIncome.toLocaleString("en-IN")} in income. Top spending categories: ${topCatStr}.`;
+    }
+
+    if (q.includes("unusual") || q.includes("alert") || q.includes("high") || q.includes("anomaly") || q.includes("bada kharcha")) {
+      if (unusualExpenses.length === 0 && categoryBudgetAlerts.length === 0) {
+        return `No unusual high-ticket expenses or category budget breaches detected this month, Sir. Your today's spend is ₹${spent} out of ₹${lim} (${pct}%).`;
+      }
+      const parts: string[] = [];
+      if (unusualExpenses.length > 0) {
+        parts.push(`High outlays flagged: ${unusualExpenses.join(", ")}`);
+      }
+      if (categoryBudgetAlerts.length > 0) {
+        parts.push(`Category budget alerts: ${categoryBudgetAlerts.join("; ")}`);
+      }
+      return `Telemetry scan complete, Sir. ${parts.join(". ")}. Review these entries to protect your monthly runway.`;
+    }
+
+    if (q.includes("save") || q.includes("saving") || q.includes("suggestion") || q.includes("tip") || q.includes("advice") || q.includes("bachat")) {
+      const topCat = topCategories[0] || "discretionary categories";
+      const goalNote =
+        savingsGoalsSummary.length > 0
+          ? ` Active savings goals: ${savingsGoalsSummary.join(", ")}.`
+          : "";
+      return `Saving suggestion based on your ledger: Your highest expense driver this month is ${topCat}. Trimming 15% there and keeping daily spend under ₹${lim} (today: ₹${spent}) will preserve ₹${Math.max(
+        0,
+        remainingMonthlyBudget
+      ).toLocaleString("en-IN")} in remaining monthly budget.${goalNote}`;
+    }
+
+    if (q.includes("balance") || q.includes("income") || q.includes("salary")) {
+      return `Your all-time net available balance is ${
+        netBalance >= 0 ? "+" : "−"
+      }₹${Math.abs(netBalance).toLocaleString("en-IN")} (This month income: +₹${monthIncome.toLocaleString(
+        "en-IN"
+      )}, This month expenses: −₹${monthExpenses.toLocaleString("en-IN")}). Income is strictly excluded from spending totals.`;
+    }
 
     if (q.includes("score")) {
       return `Your CRED Discipline Score is calibrated at ${snapshot.disciplineScore}/900, Boss. ${
@@ -495,7 +633,9 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
       }`;
     }
 
-    return `Understood, Sir. Monitoring ₹${spent} against your ₹${lim} quota. Non-essential outlays are being suppressed.`;
+    return `Understood, Sir. Today's spend is ₹${spent} of ₹${lim} (${pct}%), and this month's total expenses are ₹${monthExpenses.toLocaleString(
+      "en-IN"
+    )} with ₹${remainingMonthlyBudget.toLocaleString("en-IN")} monthly budget remaining.`;
   };
 
   const executeJarvisAction = (action: {
@@ -652,14 +792,14 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
     let spokenFirstSentence = false;
     let actionDetected: any = extractClientIntentAction(trimmed);
 
-    // 2. Give Gemini enough time to generate a real answer before falling back
+    // 2. FAST 3-SECOND TIMEOUT FOR CLOUD STREAMING
     const controller = new AbortController();
     let firstTokenReceived = false;
     const firstTokenTimer = setTimeout(() => {
       if (!firstTokenReceived) {
         controller.abort();
       }
-    }, 20000);
+    }, 3000);
 
     try {
       const streamResponse = await fetch("/api/jarvis/stream", {
@@ -683,18 +823,13 @@ export const JarvisDrawer: React.FC<JarvisDrawerProps> = ({
 
       const reader = streamResponse.body.getReader();
       const decoder = new TextDecoder("utf-8");
-      // SSE events may be split across network chunks. Keep the unfinished line
-      // until the next chunk arrives instead of silently dropping partial JSON.
-      let sseBuffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        sseBuffer += chunk;
-        const lines = sseBuffer.split("\n");
-        sseBuffer = lines.pop() || "";
+        const lines = chunk.split("\n");
 
         for (const line of lines) {
           if (line.startsWith("data: ")) {

@@ -61,11 +61,18 @@ export const EpicDebtCardModal: React.FC<EpicDebtCardModalProps> = ({
     .map((e) => `${e.description} (₹${e.amount})`)
     .join(", ");
 
-  const upiDeepLink = `upi://pay?pa=${encodeURIComponent(
-    myUpiId
-  )}&pn=Mrigander&am=${positiveAmount}&tn=${encodeURIComponent(
-    `Bounty-${friend.name.replace(/\s+/g, "")}`
-  )}&cu=INR`;
+  const cleanUpi = (myUpiId || "").trim();
+  const hasConfiguredUpi = Boolean(
+    cleanUpi && cleanUpi.includes("@") && cleanUpi.toLowerCase() !== "mrigander@upi"
+  );
+
+  const upiDeepLink = hasConfiguredUpi
+    ? `upi://pay?pa=${encodeURIComponent(
+        cleanUpi
+      )}&pn=KharcheeUser&am=${positiveAmount}&tn=${encodeURIComponent(
+        `Bounty-${friend.name.replace(/\s+/g, "")}`
+      )}&cu=INR`
+    : "";
 
   const whatsappNoticeText =
     posterMode === "bounty"
@@ -75,8 +82,9 @@ export const EpicDebtCardModal: React.FC<EpicDebtCardModalProps> = ({
         `====================================\n` +
         `💀 *Crime:* Ghosting after ${unsettledItems || "peer-to-peer Khata split"}\n` +
         `💰 *Bounty Reward:* Instant Friendship Restoration\n` +
-        `⚡ *Clear Your Bounty via 1-Tap UPI (${myUpiId}):*\n${upiDeepLink}\n\n` +
-        `_Scan the embedded UPI QR in the Bounty Poster or tap above before J.A.R.V.I.S. escalates to the group chat!_`
+        (hasConfiguredUpi
+          ? `⚡ *Clear Your Bounty via 1-Tap UPI (${cleanUpi}):*\n${upiDeepLink}\n\n_Scan the embedded UPI QR in the Bounty Poster or tap above before J.A.R.V.I.S. escalates to the group chat!_`
+          : `⚠️ _(Save your personal UPI ID in Settings/Profile to attach a 1-tap UPI payment link)_`)
       : `⚡ *STARK INDUSTRIES · OFFICIAL KHATA NOTICE* ⚡\n` +
         `----------------------------------------\n` +
         `📄 *Invoice Ref:* #${invoiceId}\n` +
@@ -86,7 +94,9 @@ export const EpicDebtCardModal: React.FC<EpicDebtCardModalProps> = ({
         (unsettledItems ? `🧾 *Billed Items:* ${unsettledItems}\n` : "") +
         `----------------------------------------\n` +
         `🤖 *J.A.R.V.I.S. Advisory:* _"Sir ${friend.name.split(" ")[0]}, your ledger balance requires immediate perimeter clearance."_\n\n` +
-        `📲 *1-Tap Direct UPI Settlement (${myUpiId}):*\n${upiDeepLink}`;
+        (hasConfiguredUpi
+          ? `📲 *1-Tap Direct UPI Settlement (${cleanUpi}):*\n${upiDeepLink}`
+          : `⚠️ _(Configure your personal UPI ID in Settings/Profile to include a direct UPI payment link)_`);
 
   const digits = friend.phone.replace(/\D/g, "");
   const cleanPhone = digits.length === 10 ? `91${digits}` : digits;
@@ -173,18 +183,27 @@ export const EpicDebtCardModal: React.FC<EpicDebtCardModalProps> = ({
       ctx.font = "bold 16px monospace";
       ctx.fillText("⚡ SCAN CENTER QR TO CLEAR BOUNTY ⚡", 380, 295);
 
-      if (qrCanvas) {
+      if (hasConfiguredUpi && qrCanvas) {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(250, 315, 260, 260);
         ctx.strokeStyle = "#f43f5e";
         ctx.lineWidth = 4;
         ctx.strokeRect(250, 315, 260, 260);
         ctx.drawImage(qrCanvas, 265, 330, 230, 230);
+      } else {
+        ctx.fillStyle = "#fde68a";
+        ctx.font = "bold 16px monospace";
+        ctx.fillText("ADD YOUR UPI ID IN SETTINGS/PROFILE", 380, 435);
+        ctx.fillText("TO GENERATE PAYMENT QR", 380, 465);
       }
 
       ctx.fillStyle = "#38bdf8";
       ctx.font = "bold 18px monospace";
-      ctx.fillText(`UPI ID: ${myUpiId}`, 380, 618);
+      ctx.fillText(
+        hasConfiguredUpi ? `UPI ID: ${cleanUpi}` : "UPI ID NOT CONFIGURED",
+        380,
+        618
+      );
 
       // Giant Reward / Unsettled Amount Banner
       ctx.fillStyle = "#240810";
@@ -249,7 +268,7 @@ export const EpicDebtCardModal: React.FC<EpicDebtCardModalProps> = ({
     ctx.fillText(`INR ₹${positiveAmount.toLocaleString("en-IN")}`, 60, 320);
 
     const qrCanvas = hiddenQrWrapRef.current?.querySelector("canvas");
-    if (qrCanvas) {
+    if (hasConfiguredUpi && qrCanvas) {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(260, 410, 240, 240);
       ctx.drawImage(qrCanvas, 275, 425, 210, 210);
@@ -258,7 +277,13 @@ export const EpicDebtCardModal: React.FC<EpicDebtCardModalProps> = ({
     ctx.fillStyle = "#38bdf8";
     ctx.font = "bold 18px monospace";
     ctx.textAlign = "center";
-    ctx.fillText(`SCAN TO PAY UPI: ${myUpiId}`, 380, 700);
+    ctx.fillText(
+      hasConfiguredUpi
+        ? `SCAN TO PAY UPI: ${cleanUpi}`
+        : "ADD UPI ID IN SETTINGS/PROFILE TO GENERATE QR",
+      380,
+      700
+    );
 
     return canvas;
   };
@@ -310,15 +335,17 @@ export const EpicDebtCardModal: React.FC<EpicDebtCardModalProps> = ({
       aria-labelledby="epic-debt-card-title"
     >
       {/* Hidden high-res canvas QR for PNG export */}
-      <div ref={hiddenQrWrapRef} className="hidden" aria-hidden="true">
-        <QRCodeCanvas
-          value={upiDeepLink}
-          size={240}
-          level="H"
-          bgColor="#ffffff"
-          fgColor="#090d16"
-        />
-      </div>
+      {hasConfiguredUpi && (
+        <div ref={hiddenQrWrapRef} className="hidden" aria-hidden="true">
+          <QRCodeCanvas
+            value={upiDeepLink}
+            size={240}
+            level="H"
+            bgColor="#ffffff"
+            fgColor="#090d16"
+          />
+        </div>
+      )}
 
       <div
         className="w-full max-w-[400px] rounded-3xl border bg-slate-950 p-4 shadow-2xl relative overflow-hidden text-slate-100 space-y-3 max-h-[92vh] overflow-y-auto no-scrollbar"
@@ -422,24 +449,35 @@ export const EpicDebtCardModal: React.FC<EpicDebtCardModalProps> = ({
 
             {/* Center Embedded Pre-Rendered Receiving UPI QR Code */}
             <div className="py-2 flex flex-col items-center justify-center">
-              <div className="p-3 rounded-2xl bg-[#1f1207]/90 border-2 border-amber-400/80 shadow-[0_0_25px_rgba(245,158,11,0.3)] flex flex-col items-center">
-                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-amber-300 mb-2">
-                  ⚡ SCAN CENTER QR TO CLEAR BOUNTY ⚡
-                </span>
-                <div className="p-2.5 rounded-xl bg-white border-2 border-rose-500">
-                  <QRCodeSVG
-                    value={upiDeepLink}
-                    size={144}
-                    level="H"
-                    bgColor="#ffffff"
-                    fgColor="#090d16"
-                  />
+              {hasConfiguredUpi ? (
+                <div className="p-3 rounded-2xl bg-[#1f1207]/90 border-2 border-amber-400/80 shadow-[0_0_25px_rgba(245,158,11,0.3)] flex flex-col items-center">
+                  <span className="text-[9px] font-mono font-black uppercase tracking-widest text-amber-300 mb-2">
+                    ⚡ SCAN CENTER QR TO CLEAR BOUNTY ⚡
+                  </span>
+                  <div className="p-2.5 rounded-xl bg-white border-2 border-rose-500">
+                    <QRCodeSVG
+                      value={upiDeepLink}
+                      size={144}
+                      level="H"
+                      bgColor="#ffffff"
+                      fgColor="#090d16"
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center gap-1 text-[10px] font-mono text-cyan-300 font-bold">
+                    <QrCode className="w-3 h-3 text-amber-400" />
+                    <span>Receiving UPI: {cleanUpi}</span>
+                  </div>
                 </div>
-                <div className="mt-2 flex items-center gap-1 text-[10px] font-mono text-cyan-300 font-bold">
-                  <QrCode className="w-3 h-3 text-amber-400" />
-                  <span>Receiving UPI: {myUpiId}</span>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-400/50 text-center space-y-1">
+                  <p className="text-xs font-bold text-amber-300">
+                    Personal UPI ID Required
+                  </p>
+                  <p className="text-[11px] text-amber-100/85 leading-relaxed">
+                    Add and save your personal UPI ID in Settings / Profile first to generate a dynamic Bounty QR code and UPI payment link.
+                  </p>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Bounty Reward Box */}
@@ -504,22 +542,35 @@ export const EpicDebtCardModal: React.FC<EpicDebtCardModalProps> = ({
 
             {/* Pre-Rendered Receiving UPI QR Code */}
             <div className="py-2 flex flex-col items-center justify-center">
-              <div
-                className="p-2.5 rounded-2xl bg-white border-2 shadow-lg"
-                style={{ borderColor: theme.accentHex }}
-              >
-                <QRCodeSVG
-                  value={upiDeepLink}
-                  size={136}
-                  level="H"
-                  bgColor="#ffffff"
-                  fgColor="#090d16"
-                />
-              </div>
-              <div className="mt-2 flex items-center gap-1 text-[10px] font-mono text-cyan-300 font-bold">
-                <QrCode className="w-3 h-3" />
-                <span>Pay to UPI: {myUpiId}</span>
-              </div>
+              {hasConfiguredUpi ? (
+                <>
+                  <div
+                    className="p-2.5 rounded-2xl bg-white border-2 shadow-lg"
+                    style={{ borderColor: theme.accentHex }}
+                  >
+                    <QRCodeSVG
+                      value={upiDeepLink}
+                      size={136}
+                      level="H"
+                      bgColor="#ffffff"
+                      fgColor="#090d16"
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center gap-1 text-[10px] font-mono text-cyan-300 font-bold">
+                    <QrCode className="w-3 h-3" />
+                    <span>Pay to UPI: {cleanUpi}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-400/50 text-center space-y-1">
+                  <p className="text-xs font-bold text-amber-300">
+                    Personal UPI ID Required
+                  </p>
+                  <p className="text-[11px] text-amber-100/85 leading-relaxed">
+                    Add and save your personal UPI ID in Settings / Profile first to generate a dynamic Invoice QR code and UPI link.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Witty JARVIS Invoice Footer */}

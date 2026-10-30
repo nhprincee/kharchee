@@ -1,6 +1,13 @@
 import React, { useState, useMemo } from "react";
-import { Search, Download, ReceiptText, Check, FileSpreadsheet, Plus } from "lucide-react";
-import type { Expense, ExpenseCategory, FanTheme, PaymentMode, TransactionType } from "../types";
+import { Search, Download, ReceiptText, Check, FileSpreadsheet, Plus, Calendar } from "lucide-react";
+import {
+  INCOME_ONLY_CATEGORIES,
+  type Expense,
+  type ExpenseCategory,
+  type FanTheme,
+  type PaymentMode,
+  type TransactionType,
+} from "../types";
 import { SwipeableExpenseRow } from "./SwipeableExpenseRow";
 
 interface HistoryViewProps {
@@ -29,6 +36,10 @@ const CATEGORY_FILTERS: Array<"All" | ExpenseCategory> = [
 
 const MODE_FILTERS: Array<"All" | PaymentMode> = ["All", "UPI", "Cash", "Card"];
 
+function isIncomeTx(e: Expense): boolean {
+  return e.type === "income" || INCOME_ONLY_CATEGORIES.includes(e.category);
+}
+
 function formatDayGroupLabel(isoDateKey: string): string {
   const [y, m, d] = isoDateKey.split("-").map(Number);
   const dateObj = new Date(y, m - 1, d);
@@ -49,9 +60,24 @@ function formatDayGroupLabel(isoDateKey: string): string {
   });
 }
 
+const MONTH_OPTIONS = [
+  { value: "All", label: "All Months" },
+  { value: "0", label: "January" },
+  { value: "1", label: "February" },
+  { value: "2", label: "March" },
+  { value: "3", label: "April" },
+  { value: "4", label: "May" },
+  { value: "5", label: "June" },
+  { value: "6", label: "July" },
+  { value: "7", label: "August" },
+  { value: "8", label: "September" },
+  { value: "9", label: "October" },
+  { value: "10", label: "November" },
+  { value: "11", label: "December" },
+];
+
 export const HistoryView: React.FC<HistoryViewProps> = ({
   expenses,
-  theme,
   onDeleteExpense,
   onEditExpense,
   onOpenAddModal,
@@ -62,12 +88,26 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [selectedType, setSelectedType] = useState<"All" | TransactionType>("All");
   const [selectedCategory, setSelectedCategory] = useState<"All" | ExpenseCategory>("All");
   const [selectedMode, setSelectedMode] = useState<"All" | PaymentMode>("All");
+  const [selectedMonth, setSelectedMonth] = useState<string>("All");
+  const [selectedYear, setSelectedYear] = useState<string>("All");
   const [isExporting, setIsExporting] = useState(false);
+
+  const availableYears = useMemo(() => {
+    const nowYr = new Date().getFullYear();
+    const set = new Set<number>([nowYr, nowYr - 1]);
+    for (const e of expenses) {
+      const y = new Date(e.timestamp).getFullYear();
+      if (!Number.isNaN(y) && y >= 2000 && y <= 2100) {
+        set.add(y);
+      }
+    }
+    return Array.from(set).sort((a, b) => b - a);
+  }, [expenses]);
 
   const filteredExpenses = useMemo(() => {
     return expenses
       .filter((exp) => {
-        const expType: TransactionType = exp.type === "income" ? "income" : "expense";
+        const expType: TransactionType = isIncomeTx(exp) ? "income" : "expense";
         if (selectedType !== "All" && expType !== selectedType) {
           return false;
         }
@@ -76,6 +116,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         }
         if (selectedMode !== "All" && exp.paymentMode !== selectedMode) {
           return false;
+        }
+        if (selectedMonth !== "All" || selectedYear !== "All") {
+          const dt = new Date(exp.timestamp);
+          if (selectedMonth !== "All" && dt.getMonth() !== Number(selectedMonth)) {
+            return false;
+          }
+          if (selectedYear !== "All" && dt.getFullYear() !== Number(selectedYear)) {
+            return false;
+          }
         }
         if (query.trim()) {
           const q = query.toLowerCase();
@@ -88,7 +137,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         return true;
       })
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [expenses, query, selectedType, selectedCategory, selectedMode]);
+  }, [expenses, query, selectedType, selectedCategory, selectedMode, selectedMonth, selectedYear]);
 
   const groupedByDate = useMemo(() => {
     const groups: Array<{
@@ -113,10 +162,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
     for (const [dateKey, items] of map.entries()) {
       const expenseTotal = items
-        .filter((i) => i.type !== "income")
+        .filter((i) => !isIncomeTx(i))
         .reduce((acc, item) => acc + item.amount, 0);
       const incomeTotal = items
-        .filter((i) => i.type === "income")
+        .filter((i) => isIncomeTx(i))
         .reduce((acc, item) => acc + item.amount, 0);
       groups.push({
         dateKey,
@@ -132,7 +181,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const filteredOutflow = useMemo(
     () =>
       filteredExpenses
-        .filter((e) => e.type !== "income")
+        .filter((e) => !isIncomeTx(e))
         .reduce((sum, e) => sum + e.amount, 0),
     [filteredExpenses]
   );
@@ -140,7 +189,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const filteredInflow = useMemo(
     () =>
       filteredExpenses
-        .filter((e) => e.type === "income")
+        .filter((e) => isIncomeTx(e))
         .reduce((sum, e) => sum + e.amount, 0),
     [filteredExpenses]
   );
@@ -149,6 +198,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     selectedType !== "All" ||
     selectedCategory !== "All" ||
     selectedMode !== "All" ||
+    selectedMonth !== "All" ||
+    selectedYear !== "All" ||
     query.trim().length > 0;
 
   // Export transaction history as CSV file
@@ -286,7 +337,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
       )}
 
-      {/* Search Input & Type Filter */}
+      {/* Search Input, Type Filter & Month/Year Filter */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -299,21 +350,53 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0c1220] border border-slate-800 shrink-0">
-          {(["All", "expense", "income"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setSelectedType(t)}
-              className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
-                selectedType === t
-                  ? "bg-indigo-600 text-white"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0c1220] border border-slate-800 shrink-0">
+            {(["All", "expense", "income"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setSelectedType(t)}
+                className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                  selectedType === t
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {t === "All" ? "All Types" : t === "expense" ? "Expenses (−)" : "Income (+)"}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-indigo-400 hidden sm:block" />
+            <select
+              aria-label="Filter by month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="h-9 px-2.5 rounded-xl bg-[#0c1220] border border-slate-800 text-[11px] font-semibold text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
-              {t === "All" ? "All Types" : t === "expense" ? "Expenses (−)" : "Income (+)"}
-            </button>
-          ))}
+              {MONTH_OPTIONS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              aria-label="Filter by year"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="h-9 px-2.5 rounded-xl bg-[#0c1220] border border-slate-800 text-[11px] font-mono font-semibold text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="All">All Years</option>
+              {availableYears.map((yr) => (
+                <option key={yr} value={String(yr)}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

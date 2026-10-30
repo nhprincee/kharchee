@@ -97,18 +97,25 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
 
   const Icon = getCategoryIcon(expense.category);
 
-  const activeUpiId =
+  const rawUpi = (
     myUpiId ||
     (typeof window !== "undefined"
-      ? localStorage.getItem("kharche_my_upi_id_v1") || "mrigander@upi"
-      : "mrigander@upi");
+      ? localStorage.getItem("kharche_my_upi_id_v1") || ""
+      : "")
+  ).trim();
+  const hasConfiguredUpi = Boolean(
+    rawUpi && rawUpi.includes("@") && rawUpi.toLowerCase() !== "mrigander@upi"
+  );
+  const activeUpiId = hasConfiguredUpi ? rawUpi : "";
 
   const perPersonShare = Math.ceil(expense.amount / splitCount);
-  const upiDeepLink = `upi://pay?pa=${encodeURIComponent(
-    activeUpiId
-  )}&pn=Mrigander&am=${perPersonShare}&cu=INR&tn=${encodeURIComponent(
-    `Split: ${expense.title}`
-  )}`;
+  const upiDeepLink = hasConfiguredUpi
+    ? `upi://pay?pa=${encodeURIComponent(
+        activeUpiId
+      )}&pn=KharcheeUser&am=${perPersonShare}&cu=INR&tn=${encodeURIComponent(
+        `Split: ${expense.title}`
+      )}`
+    : "";
 
   const splitRoastTemplates = [
     `Bhai tere ₹${perPersonShare.toLocaleString("en-IN")} k chakkar me mera daily budget Thanos ban gaya hai, jaldi settle kar! 💀⚡ (${expense.title} Split)`,
@@ -122,12 +129,18 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
   const whatsappText = roastMode
     ? `🔥 *KHARCHE SAVAGE SPLIT ALERT*\n\n"${activeRoastLine}"\n\n💰 Tera Share: *₹${perPersonShare.toLocaleString(
         "en-IN"
-      )}* (Total ₹${expense.amount.toLocaleString("en-IN")} ÷ ${splitCount})\n⚡ 1-Tap UPI Pay (${activeUpiId}):\n${upiDeepLink}`
+      )}* (Total ₹${expense.amount.toLocaleString("en-IN")} ÷ ${splitCount})` +
+      (hasConfiguredUpi
+        ? `\n⚡ 1-Tap UPI Pay (${activeUpiId}):\n${upiDeepLink}`
+        : `\n⚠️ _(Configure your personal UPI ID in Settings/Profile to attach a direct UPI link)_`)
     : `Hey! Splitting *${expense.title}* (Total ₹${expense.amount.toLocaleString(
         "en-IN"
       )} ÷ ${splitCount} = *₹${perPersonShare.toLocaleString(
         "en-IN"
-      )}* each).\n\nPay straight to my UPI (${activeUpiId}):\n${upiDeepLink}`;
+      )}* each).` +
+      (hasConfiguredUpi
+        ? `\n\nPay straight to my UPI (${activeUpiId}):\n${upiDeepLink}`
+        : "");
 
   const whatsappHref = `https://wa.me/?text=${encodeURIComponent(whatsappText)}`;
 
@@ -438,7 +451,10 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
               </span>
             </button>
             <span className="text-[10px] font-mono text-slate-400">
-              UPI: <strong className="text-cyan-300">{activeUpiId}</strong>
+              UPI:{" "}
+              <strong className={hasConfiguredUpi ? "text-cyan-300" : "text-amber-300"}>
+                {hasConfiguredUpi ? activeUpiId : "Not Set (Add in Profile)"}
+              </strong>
             </span>
           </div>
 
@@ -461,9 +477,15 @@ export const SwipeableExpenseRow: React.FC<SwipeableExpenseRowProps> = ({
                   Attendees: You + {splitCount - 1} Friends ({splitCount} total)
                 </p>
               </div>
-              <div className="p-1.5 rounded-xl bg-white shrink-0 shadow-[0_0_12px_rgba(34,211,238,0.35)]">
-                <QRCodeSVG value={upiDeepLink} size={64} level="M" includeMargin={false} />
-              </div>
+              {hasConfiguredUpi ? (
+                <div className="p-1.5 rounded-xl bg-white shrink-0 shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+                  <QRCodeSVG value={upiDeepLink} size={64} level="M" includeMargin={false} />
+                </div>
+              ) : (
+                <div className="p-2 rounded-xl bg-amber-950/40 border border-amber-400/40 text-[10px] font-mono text-amber-300 text-right max-w-[130px]">
+                  Save your UPI ID in Settings/Profile to generate QR
+                </div>
+              )}
             </div>
           )}
 

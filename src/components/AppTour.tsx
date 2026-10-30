@@ -48,10 +48,10 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     targetId: "tour-themes-bar",
-    badge: "FAN-ZONE AESTHETICS",
-    title: "Dynamic Fan-Zone Themes",
+    badge: "LUXURY TECH THEMES",
+    title: "Dynamic HUD Themes",
     description:
-      "Switch club and superhero identities anytime! Tapping Avengers, Real Madrid, Barcelona, or Arc Core transforms the app background, glowing neon rings, and buttons instantly.",
+      "Switch between Arc Core HUD, Midnight Titanium, Cyberpunk Emerald, and Stark Armor anytime to customize your financial cockpit.",
     icon: <Palette className="w-5 h-5" />,
     positionPreference: "top",
   },
